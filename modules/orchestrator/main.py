@@ -890,8 +890,8 @@ def buy(req: BuyRequest):
     # ========================================================
     # STAGE 1: Constraint Compilation (Deterministic Layer)
     # ========================================================
-    if req.simulate_failure_stage == 1 or len(req.raw_intent.strip()) < 5:
-        err_msg = "Compiler Rejection: Intent string too short (< 5 chars) or invalid constraint schema (RFC 8785)"
+    if req.simulate_failure_stage == 1 or len(req.raw_intent.strip()) < 3:
+        err_msg = "Compiler Rejection: Intent string too short (< 3 chars) or invalid constraint schema (RFC 8785)"
         paths = write_transaction_audit_files(
             trace_id=trace_id,
             status="FAILED",
@@ -1448,8 +1448,8 @@ async def buy_stream(req: BuyRequest):
         await asyncio.sleep(0.35)
 
         # 1. Constraint Compilation
-        if req.simulate_failure_stage == 1 or len(req.raw_intent.strip()) < 5:
-            err_msg = "Compiler Rejection: Intent string too short (< 5 chars) or invalid constraint schema (RFC 8785)"
+        if req.simulate_failure_stage == 1 or len(req.raw_intent.strip()) < 3:
+            err_msg = "Compiler Rejection: Intent string too short (< 3 chars) or invalid constraint schema (RFC 8785)"
             yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'CONSTRAINT_COMPILATION', 'error': err_msg, 'timestamp': ts()})}\n\n"
             yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'COMPILATION_ERROR', 'error': err_msg, 'timestamp': ts()})}\n\n"
             return

@@ -54,7 +54,7 @@ class CompiledConstraints(BaseModel):
 
 
 class CompileRequest(BaseModel):
-    raw_intent: str = Field(..., min_length=5, description="Natural language purchase intent from buyer")
+    raw_intent: str = Field(..., min_length=3, description="Natural language purchase intent from buyer")
     buyer_did: Optional[str] = Field(default=None, description="Buyer decentralized identifier")
     max_spend_inr: Optional[float] = Field(default=None, gt=0, description="Optional explicit max spend override in INR")
     allowed_merchants: Optional[List[str]] = Field(default=None, description="Optional merchant allowlist override")
