@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Shield,
   ArrowLeft,
@@ -48,6 +48,14 @@ export const BuyerNavbar: React.FC<BuyerNavbarProps> = ({
   autonomyMode = "autonomous",
   onToggleAutonomyMode,
 }) => {
+  const [showTooltip, setShowTooltip] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowTooltip(false);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
   return (
     <header className="sticky top-0 z-40 backdrop-blur-md bg-[var(--white)]/90 border-b border-[rgba(92,61,46,0.08)] shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
@@ -127,29 +135,45 @@ export const BuyerNavbar: React.FC<BuyerNavbarProps> = ({
             </button>
           </div>
 
-          {/* Autonomy Badge / PIN Toggle Button */}
-          <button
-            type="button"
-            onClick={onToggleAutonomyMode}
-            title="Click to toggle between Autonomous AI mode and PIN-required manual confirmation"
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono border cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] ${
-              autonomyMode === "autonomous"
-                ? "bg-[var(--gold-faint)] border-[var(--gold)] text-[var(--brown)] font-medium hover:bg-[var(--gold-faint)]/80"
-                : "bg-emerald-50 border-emerald-300 text-emerald-800 font-medium hover:bg-emerald-100/70"
-            }`}
-          >
-            {autonomyMode === "autonomous" ? (
-              <>
-                <Bot className="w-3.5 h-3.5 text-[var(--brown)]" />
-                <span className="hidden sm:inline">Autonomous AI</span>
-              </>
-            ) : (
-              <>
-                <UserCheck className="w-3.5 h-3.5 text-emerald-700" />
-                <span className="hidden sm:inline">PIN Required (1234)</span>
-              </>
+          {/* Autonomy Badge / PIN Toggle Button with 3s Text Cloud */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setShowTooltip(false);
+                onToggleAutonomyMode?.();
+              }}
+              title="Click to toggle between Autonomous AI mode and PIN-required manual confirmation"
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono border cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] ${
+                autonomyMode === "autonomous"
+                  ? "bg-[var(--gold-faint)] border-[var(--gold)] text-[var(--brown)] font-medium hover:bg-[var(--gold-faint)]/80"
+                  : "bg-emerald-50 border-emerald-300 text-emerald-800 font-medium hover:bg-emerald-100/70"
+              }`}
+            >
+              {autonomyMode === "autonomous" ? (
+                <>
+                  <Bot className="w-3.5 h-3.5 text-[var(--brown)]" />
+                  <span className="hidden sm:inline">Autonomous AI</span>
+                </>
+              ) : (
+                <>
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-700" />
+                  <span className="hidden sm:inline">Manual Mode (PIN)</span>
+                </>
+              )}
+            </button>
+
+            {/* 3-Second Speech Bubble / Text Cloud */}
+            {showTooltip && autonomyMode === "autonomous" && (
+              <div className="absolute right-0 top-9 z-50 animate-in fade-in slide-in-from-top-1 duration-200 pointer-events-none">
+                <div className="relative bg-[var(--brown-dark)] text-white text-[11px] font-sans px-3 py-1.5 rounded-xl shadow-xl whitespace-nowrap border border-[var(--gold)] flex items-center gap-1.5">
+                  <span>💡 Switch to Manual Mode here to require PIN & manual checkout</span>
+                  {/* Arrow pointing up to the button */}
+                  <div className="absolute -top-1 right-8 w-2.5 h-2.5 bg-[var(--brown-dark)] border-t border-l border-[var(--gold)] rotate-45" />
+                </div>
+              </div>
             )}
-          </button>
+          </div>
         </div>
       </div>
 

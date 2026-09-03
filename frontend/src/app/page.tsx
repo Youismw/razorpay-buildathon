@@ -13,6 +13,7 @@ import { MandatesView } from "@/components/mandates/MandatesManagerView";
 import { AdvancedToolsView } from "@/components/advanced/AdvancedToolsView";
 import { SellerDashboard } from "@/components/seller/SellerDashboard";
 import { PinPromptModal } from "@/components/shared/PinPromptModal";
+import { SetPinModal } from "@/components/shared/SetPinModal";
 import { ToastProvider, useToast } from "@/components/shared/ToastContext";
 import {
   BuyRequest,
@@ -89,6 +90,7 @@ function AppContent() {
   const [transactions, setTransactions] = useState<TransactionAuditRecord[]>([]);
   const [profile, setProfile] = useState<UserProfileState>(DEFAULT_USER_PROFILE);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [isSetPinModalOpen, setIsSetPinModalOpen] = useState(false);
   const [pendingReq, setPendingReq] = useState<BuyRequest | null>(null);
   const { showToast } = useToast();
 
@@ -307,11 +309,15 @@ function AppContent() {
         backendOnline={backendOnline}
         autonomyMode={profile.autonomyMode}
         onToggleAutonomyMode={() => {
-          const next: "autonomous" | "pin_required" = profile.autonomyMode === "autonomous" ? "pin_required" : "autonomous";
-          const updated: UserProfileState = { ...profile, autonomyMode: next };
-          setProfile(updated);
-          saveUserProfile(updated);
-          showToast("Autonomy Mode Updated", next === "pin_required" ? "PIN Confirmation Required (1234)" : "Autonomous AI Execution", "info");
+          if (profile.autonomyMode === "autonomous") {
+            // Prompt user to choose and set their password before entering manual mode
+            setIsSetPinModalOpen(true);
+          } else {
+            const updated: UserProfileState = { ...profile, autonomyMode: "autonomous" };
+            setProfile(updated);
+            saveUserProfile(updated);
+            showToast("Autonomous AI Enabled", "Transactions settle automatically via UPI Autopay", "info");
+          }
         }}
       />
 
@@ -384,6 +390,19 @@ function AppContent() {
           setIsPinModalOpen(false);
           setPendingReq(null);
         }}
+      />
+
+      {/* Set Password / PIN Modal when switching to Manual Mode */}
+      <SetPinModal
+        isOpen={isSetPinModalOpen}
+        onSave={(newPin) => {
+          const updated: UserProfileState = { ...profile, autonomyMode: "pin_required", userPin: newPin };
+          setProfile(updated);
+          saveUserProfile(updated);
+          setIsSetPinModalOpen(false);
+          showToast("Manual Mode Enabled", "PIN successfully set! All transactions will require this PIN.", "success");
+        }}
+        onCancel={() => setIsSetPinModalOpen(false)}
       />
     </div>
   );
