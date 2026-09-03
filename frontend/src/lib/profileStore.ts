@@ -25,7 +25,7 @@ export const DEFAULT_USER_PROFILE: UserProfileState = {
   userName: "Rohit Chauhan",
   maxTransactionLimitInr: 5000,
   monthlyLimitInr: 25000,
-  autonomyMode: "autonomous",
+  autonomyMode: "pin_required",
   userPin: "1234",
   dietaryPreference: "Vegetarian / Organic First",
   favoriteBrands: ["Amul", "Blue Tokai", "Aashirvaad", "Sony", "Britannia"],

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PipelineStageState } from "@/lib/types";
 import {
@@ -306,6 +306,23 @@ export const VerticalPipeline: React.FC<VerticalPipelineProps> = ({
     const rzpInstance = new (window as any).Razorpay(options);
     rzpInstance.open();
   };
+
+  const lastAutoLaunchedOrder = useRef<string | null>(null);
+  useEffect(() => {
+    const settlementStage = stages.find((s) => s.id === "SETTLEMENT" && ((s as any).status === "passed" || (s as any).status === "success"));
+    if (settlementStage?.data?.razorpay_order_id) {
+      const orderId = String(settlementStage.data.razorpay_order_id);
+      if (lastAutoLaunchedOrder.current !== orderId) {
+        lastAutoLaunchedOrder.current = orderId;
+        const amountPaise = Number(settlementStage.data.total_price_paise || (Number(settlementStage.data.total_inr || 0) * 100));
+        const keyId = typeof settlementStage.data.razorpay_key_id === "string" ? settlementStage.data.razorpay_key_id : undefined;
+        const timer = setTimeout(() => {
+          handleOpenRazorpayCheckout(orderId, amountPaise, keyId);
+        }, 700);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [stages]);
 
   return (
     <div className="flex flex-col items-center w-full max-w-lg mx-auto py-8 space-y-0 relative">

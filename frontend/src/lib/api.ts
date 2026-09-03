@@ -1,6 +1,28 @@
 import { BuyRequest, BuyResponse, Invariant, MerchantCatalog, TransactionAuditRecord } from "./types";
 
-export const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
+export function getBackendUrl(): string {
+  if (typeof window !== "undefined") {
+    const saved = localStorage.getItem("ap2_backend_url");
+    if (saved && saved.trim()) {
+      return saved.trim().replace(/\/+$/, "");
+    }
+    if (process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.trim()) {
+      return process.env.NEXT_PUBLIC_API_URL.trim().replace(/\/+$/, "");
+    }
+    const host = window.location.hostname;
+    if (host.includes("onrender.com")) {
+      if (host.includes("-frontend")) {
+        return `https://${host.replace("-frontend", "-backend")}`;
+      }
+      if (host.includes("frontend")) {
+        return `https://${host.replace("frontend", "backend")}`;
+      }
+    }
+  }
+  return (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
+}
+
+export const BACKEND_URL = getBackendUrl();
 
 export async function checkBackendHealth(): Promise<{ status: string; online: boolean }> {
   try {

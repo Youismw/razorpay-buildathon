@@ -27,11 +27,13 @@ import {
   fetchCatalog,
   fetchAuditLogs,
   streamBuyIntent,
+  getBackendUrl,
 } from "@/lib/api";
 import {
   UserProfileState,
   DEFAULT_USER_PROFILE,
   loadUserProfile,
+  saveUserProfile,
 } from "@/lib/profileStore";
 
 const INITIAL_STAGES: PipelineStageState[] = [
@@ -304,7 +306,38 @@ function AppContent() {
         onBack={() => setRole("none")}
         backendOnline={backendOnline}
         autonomyMode={profile.autonomyMode}
+        onToggleAutonomyMode={() => {
+          const next: "autonomous" | "pin_required" = profile.autonomyMode === "autonomous" ? "pin_required" : "autonomous";
+          const updated: UserProfileState = { ...profile, autonomyMode: next };
+          setProfile(updated);
+          saveUserProfile(updated);
+          showToast("Autonomy Mode Updated", next === "pin_required" ? "PIN Confirmation Required (1234)" : "Autonomous AI Execution", "info");
+        }}
       />
+
+      {!backendOnline && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 text-xs flex items-center justify-between text-amber-900 z-30 relative backdrop-blur-xs">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            <span>
+              Backend Disconnected. Target: <strong className="font-mono text-amber-950">{getBackendUrl()}</strong>
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              const current = getBackendUrl();
+              const url = prompt("Enter your Render Backend URL (e.g. https://your-backend.onrender.com):", current);
+              if (url && url.trim()) {
+                localStorage.setItem("ap2_backend_url", url.trim());
+                window.location.reload();
+              }
+            }}
+            className="px-2 py-0.5 rounded bg-amber-200/80 hover:bg-amber-300 text-amber-950 font-medium text-[11px] transition-colors cursor-pointer"
+          >
+            Configure Backend URL
+          </button>
+        </div>
+      )}
 
       <main className="flex-1 relative z-10 flex flex-col overflow-hidden">
         {activeTab === "search" && (

@@ -25,6 +25,7 @@ interface BuyerNavbarProps {
   onBack: () => void;
   backendOnline: boolean;
   autonomyMode?: "autonomous" | "pin_required";
+  onToggleAutonomyMode?: () => void;
 }
 
 const BUYER_NAV_ITEMS = [
@@ -45,6 +46,7 @@ export const BuyerNavbar: React.FC<BuyerNavbarProps> = ({
   onBack,
   backendOnline,
   autonomyMode = "autonomous",
+  onToggleAutonomyMode,
 }) => {
   return (
     <header className="sticky top-0 z-40 backdrop-blur-md bg-[var(--white)]/90 border-b border-[rgba(92,61,46,0.08)] shadow-sm">
@@ -125,12 +127,15 @@ export const BuyerNavbar: React.FC<BuyerNavbarProps> = ({
             </button>
           </div>
 
-          {/* Autonomy Badge */}
-          <div
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono border ${
+          {/* Autonomy Badge / PIN Toggle Button */}
+          <button
+            type="button"
+            onClick={onToggleAutonomyMode}
+            title="Click to toggle between Autonomous AI mode and PIN-required manual confirmation"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono border cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] ${
               autonomyMode === "autonomous"
-                ? "bg-[var(--gold-faint)] border-[var(--gold)] text-[var(--brown)] font-medium"
-                : "bg-[rgba(92,61,46,0.05)] border-[rgba(92,61,46,0.15)] text-[var(--text-muted)]"
+                ? "bg-[var(--gold-faint)] border-[var(--gold)] text-[var(--brown)] font-medium hover:bg-[var(--gold-faint)]/80"
+                : "bg-emerald-50 border-emerald-300 text-emerald-800 font-medium hover:bg-emerald-100/70"
             }`}
           >
             {autonomyMode === "autonomous" ? (
@@ -140,11 +145,11 @@ export const BuyerNavbar: React.FC<BuyerNavbarProps> = ({
               </>
             ) : (
               <>
-                <UserCheck className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-                <span className="hidden sm:inline">Manual Approval</span>
+                <UserCheck className="w-3.5 h-3.5 text-emerald-700" />
+                <span className="hidden sm:inline">PIN Required (1234)</span>
               </>
             )}
-          </div>
+          </button>
         </div>
       </div>
 
