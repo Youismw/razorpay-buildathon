@@ -6,6 +6,7 @@ import { useEffect, useCallback } from "react";
  * Hook that tracks cursor position relative to a container element
  * and sets CSS custom properties --mouse-x / --mouse-y on each
  * child `.card` element for the proximity-glow border effect.
+ * Automatically no-ops on touch devices without a pointer/mouse.
  */
 export function useCardGlow(containerRef: React.RefObject<HTMLElement | null>) {
   const handleMouseMove = useCallback(
@@ -26,10 +27,15 @@ export function useCardGlow(containerRef: React.RefObject<HTMLElement | null>) {
   );
 
   useEffect(() => {
+    // Only bind mouse listeners if the device supports hover/pointer
+    if (typeof window === "undefined" || !window.matchMedia("(hover: hover)").matches) {
+      return;
+    }
+
     const container = containerRef.current;
     if (!container) return;
 
-    container.addEventListener("mousemove", handleMouseMove);
+    container.addEventListener("mousemove", handleMouseMove, { passive: true });
     return () => container.removeEventListener("mousemove", handleMouseMove);
   }, [containerRef, handleMouseMove]);
 }

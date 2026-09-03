@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Inter, JetBrains_Mono, Playfair_Display } from "next/font/google";
 import "./globals.css";
@@ -19,6 +19,14 @@ const playfair = Playfair_Display({
   weight: ["400", "600", "700"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#FDFBF7",
+  viewportFit: "cover",
+};
+
 export const metadata: Metadata = {
   title: "AP2 — Autonomous Purchase Protocol | Razorpay UPI",
   description:
@@ -35,11 +43,10 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${jetbrainsMono.variable} ${playfair.variable} antialiased`}
     >
-      <body className="min-h-screen flex flex-col">
+      <body className="min-h-[100dvh] flex flex-col overflow-x-hidden">
         {children}
         <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />
       </body>
     </html>
   );
 }
-

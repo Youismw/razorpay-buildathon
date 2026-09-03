@@ -9,6 +9,7 @@ No tool calls, no secrets in context.
 
 import json
 import os
+import re
 import uuid
 import httpx
 from typing import Any, Dict, List, Optional, Tuple
@@ -69,6 +70,7 @@ def _build_system_prompt() -> str:
         "6. If NO product in the catalog matches what the buyer wants (e.g. the requested item is not sold in the catalog), set items to [] and total_price_paise to 0, and state clearly in reasoning_summary and thought_steps that no matching product exists in the catalog.\n"
         "7. If a requested product or brand is out of stock, you have autonomous authority to select a verified in-stock alternative brand from the same category within budget, explicitly detailing the substitution rationale in thought_steps and reasoning_summary.\n"
         "8. If the buyer's request is gibberish, nonsensical, ambiguous, or lacks a coherent shopping entity (e.g. 'yaya ka pika bu j'), set items to [], total_price_paise to 0, set is_ambiguous to true, and in reasoning_summary politely ask: 'Please elaborate on what you mean. Your request does not match any recognizable product or shopping category.'\n"
+        "9. QUANTITY RULE: The 'quantity' field MUST represent the number of orderable package units requested by the buyer (defaults to 1). NEVER set 'quantity' to internal pack-size numbers mentioned in a product title or packaging description (e.g., for 'Farm Fresh White Eggs (Pack of 6)', 'Maggi 2-Minute Noodles (Pack of 4)', or 'Amul Butter 500g', purchasing 1 pack must have quantity: 1, NOT 6 or 4). Only set quantity > 1 if the buyer explicitly requested multiple units or packs (e.g. 'buy 2 packs of eggs' -> quantity: 2).\n"
     )
 
 
@@ -429,19 +431,28 @@ def _generate_mock_proposal(constraints: CompiledConstraints, catalog: Dict[str,
 
     import re
     parsed_qty = 1
+
+    # Strip product size/package specifications so they are not mistaken for order quantity
+    # e.g., "(pack of 6)", "box of 12", "set of 4", "6-pack", "500g", "100ml", "46mm"
+    cleaned_intent = re.sub(r'[\(\[\{]\s*(?:pack|box|set|bundle|case)\s+of\s+\d+\s*[\)\]\}]', '', raw_lower, flags=re.I)
+    cleaned_intent = re.sub(r'\b(?:pack|box|set|bundle|case)\s+of\s+\d+\b', '', cleaned_intent, flags=re.I)
+    cleaned_intent = re.sub(r'\b\d+\s*-\s*(?:pack|piece|pcs|set)\b', '', cleaned_intent, flags=re.I)
+    cleaned_intent = re.sub(r'[\(\[\{]\s*\d+\s*(?:g|gm|gms|grams?|kg|kgs|ml|l|ltr|liters?|litres?|mm|cm|inch|oz)\s*[\)\]\}]', '', cleaned_intent, flags=re.I)
+    cleaned_intent = re.sub(r'\b\d+\s*(?:g|gm|gms|grams?|kg|kgs|ml|l|ltr|liters?|litres?|mm|cm|inch|oz)\b', '', cleaned_intent, flags=re.I)
+
     word_to_num = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "ten": 10, "dozen": 12}
     for w, num in word_to_num.items():
-        if re.search(rf"\b(?:buy|order|purchase|get|need)\s+{w}\b", raw_lower) or re.search(rf"\b{w}\s+(?:l|liter|liters|kg|packet|units?|items?)\b", raw_lower):
+        if re.search(rf"\b(?:buy|order|purchase|get|need)\s+{w}\b", cleaned_intent) or re.search(rf"\b{w}\s+(?:packet|packets|pack|packs|units?|items?|cartons?|boxes)\b", cleaned_intent):
             parsed_qty = num
             break
 
-    # Look for explicit quantity: preceded by verb (e.g. "buy 2") or followed by unit (e.g. "2L", "2 packets", "2x")
+    # Look for explicit quantity: preceded by verb (e.g. "buy 2") or followed by unit (e.g. "2 packets", "2 units")
     qty_patterns = [
         r'\b(?:buy|order|purchase|get|need|want|qty|quantity)\s+(\d+)\b',
-        r'\b(\d+)\s*(?:l|liter|liters|litre|litres|kg|kgs|packet|packets|pack|packs|bottle|bottles|pcs|pieces|units?|items?|cartons?|boxes|box|x)\b',
+        r'\b(\d+)\s*(?:packet|packets|pack|packs|bottle|bottles|pcs|pieces|units?|items?|cartons?|boxes|box|x)\b',
     ]
     for pat in qty_patterns:
-        m = re.search(pat, raw_lower)
+        m = re.search(pat, cleaned_intent)
         if m:
             try:
                 val = int(m.group(1))
@@ -527,10 +538,31 @@ def _post_process_proposal(
                     break
             item["merchant_id"] = found_m or default_m_id
 
-    # Recalculate total if missing
-    if "total_price_paise" not in proposal_dict or proposal_dict["total_price_paise"] <= 0:
-        total = sum(it.get("offer_price_paise", 0) * it.get("quantity", 1) for it in proposal_dict.get("items", []))
-        proposal_dict["total_price_paise"] = total
+    # Defensive normalization: enforce intended pack quantity and prevent pack-size numbers from inflating quantity
+    raw_intent_lower = (constraints.raw_intent or "").lower()
+    cleaned_intent = re.sub(r'[\(\[\{]\s*(?:pack|box|set|bundle|case)\s+of\s+\d+\s*[\)\]\}]', '', raw_intent_lower, flags=re.I)
+    cleaned_intent = re.sub(r'\b(?:pack|box|set|bundle|case)\s+of\s+\d+\b', '', cleaned_intent, flags=re.I)
+    cleaned_intent = re.sub(r'\b\d+\s*-\s*(?:pack|piece|pcs|set)\b', '', cleaned_intent, flags=re.I)
+
+    for item in proposal_dict.get("items", []):
+        p_name = item.get("product_name", "")
+        curr_qty = item.get("quantity", 1)
+        # Check if product title specifies a pack count, e.g. "Pack of 6", "Box of 12"
+        m_pack = re.search(r'\b(?:pack|box|set|bundle|case)\s+of\s+(\d+)\b', p_name, re.I)
+        if m_pack:
+            pack_size = int(m_pack.group(1))
+            # If the LLM assigned quantity matching this pack size (e.g. 6), check if buyer explicitly requested that number
+            if curr_qty == pack_size:
+                explicit_multi = bool(
+                    re.search(rf"\b(?:buy|order|purchase|get|need)\s+{pack_size}\b", cleaned_intent) or
+                    re.search(rf"\b{pack_size}\s+(?:packets?|packs?|units?|items?|cartons?|boxes)\b", cleaned_intent)
+                )
+                if not explicit_multi:
+                    item["quantity"] = 1
+
+    # Recalculate total deterministically to reflect correct quantity
+    total = sum(it.get("offer_price_paise", 0) * it.get("quantity", 1) for it in proposal_dict.get("items", []))
+    proposal_dict["total_price_paise"] = total
 
     if not thought_steps:
         max_inr = constraints.spend_limit.max_amount_paise / 100.0

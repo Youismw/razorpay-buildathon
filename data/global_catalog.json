@@ -30,7 +30,8 @@
         "name": "Logitech MX Master 3S Wireless Mouse",
         "price_paise": 899500,
         "category": "electronics",
-        "in_stock": true
+        "in_stock": true,
+        "stock": 77
       },
       "PROD-SPK-MINI3": {
         "name": "Anker Soundcore Mini 3 Bluetooth Speaker",
@@ -91,7 +92,8 @@
         "name": "Hario V60 Ceramic Pour Over Coffee Dripper Set",
         "price_paise": 189900,
         "category": "home",
-        "in_stock": true
+        "in_stock": true,
+        "stock": 40
       },
       "PROD-LAMP-LED": {
         "name": "BenQ ScreenBar e-Reading Monitor Desk Lamp",
@@ -158,7 +160,7 @@
         "price_paise": 7200,
         "category": "groceries",
         "in_stock": true,
-        "stock": 18
+        "stock": 13
       },
       "PROD-MILK-CD": {
         "name": "Country Delight Pure Cow Milk (1L)",
@@ -183,7 +185,7 @@
         "price_paise": 36000,
         "category": "groceries",
         "in_stock": true,
-        "stock": 18
+        "stock": 13
       },
       "PROD-COF-BT": {
         "name": "Blue Tokai Attikan Estate Dark Roast Coffee (250g)",
@@ -196,7 +198,7 @@
         "price_paise": 27500,
         "category": "groceries",
         "in_stock": true,
-        "stock": 18
+        "stock": 13
       },
       "PROD-ATTA-FORT": {
         "name": "Fortune Chakki Fresh Whole Wheat Atta (5kg)",
@@ -209,7 +211,7 @@
         "price_paise": 5500,
         "category": "groceries",
         "in_stock": true,
-        "stock": 18
+        "stock": 13
       },
       "PROD-BRD-TBD": {
         "name": "The Baker's Dozen Country Sourdough Loaf (350g)",
@@ -222,7 +224,7 @@
         "price_paise": 28500,
         "category": "groceries",
         "in_stock": true,
-        "stock": 18
+        "stock": 13
       },
       "PROD-BTR-PRES": {
         "name": "Pr\u00e9sident Salted Gourmet Butter (200g)",
@@ -241,7 +243,7 @@
         "price_paise": 4800,
         "category": "groceries",
         "in_stock": true,
-        "stock": 18
+        "stock": 9
       },
       "PROD-SONY-WH-CH520-WIRELE": {
         "name": "Sony WH-CH520 Wireless Headphones",
@@ -276,6 +278,62 @@
         "supplier_cost_paise": 1850000
       },
       "PROD-A1378F": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-569CDD": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-44AEE1": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-CB58E7": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-6B271D": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-2E8008": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-5BA4D4": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-E1EF84": {
         "name": "Bose QuietComfort 45 Noise Canceling Headphones",
         "price_paise": 2499900,
         "category": "electronics",

@@ -16,6 +16,9 @@ import {
   X,
   Mic,
   MicOff,
+  Lock,
+  Store,
+  Globe,
 } from "lucide-react";
 import { SellerProfile, RoutineRestockItem } from "@/lib/sellerStore";
 import { BACKEND_URL } from "@/lib/api";
@@ -37,6 +40,9 @@ interface CatalogInventoryItem {
   daysIdle: number;
   discountPct: number;
   inStock: boolean;
+  is_owned?: boolean;
+  can_edit?: boolean;
+  store_status?: string;
 }
 
 const SAMPLE_SELLER_CATALOG: CatalogInventoryItem[] = [
@@ -185,13 +191,27 @@ interface HoverStockEditorProps {
   stock: number;
   itemId: string;
   itemName: string;
+  canEdit?: boolean;
   onUpdateStock: (id: string, newStock: number) => void;
 }
 
-const HoverStockEditor: React.FC<HoverStockEditorProps> = ({ stock, itemId, itemName, onUpdateStock }) => {
+const HoverStockEditor: React.FC<HoverStockEditorProps> = ({ stock, itemId, itemName, canEdit = true, onUpdateStock }) => {
   const [visible, setVisible] = useState(false);
   const enterTimer = useRef<NodeJS.Timeout | null>(null);
   const leaveTimer = useRef<NodeJS.Timeout | null>(null);
+
+  if (canEdit === false) {
+    return (
+      <div
+        className="flex items-center gap-1.5 text-[var(--text-muted)] select-none"
+        title="Universal common market product outside your store catalog. Read-only."
+      >
+        <Lock className="w-3 h-3 text-amber-700/60" />
+        <span className="font-semibold tabular-nums text-xs text-[var(--text-secondary)]">{stock} units</span>
+        <span className="text-[9px] text-[var(--text-faint)] font-mono uppercase tracking-wider px-1 py-0.2 bg-gray-100 rounded">read-only</span>
+      </div>
+    );
+  }
 
   const handleMouseEnter = () => {
     if (leaveTimer.current) {
@@ -269,6 +289,7 @@ interface HoverPriceEditorProps {
   supplierCost: number;
   itemId: string;
   itemName: string;
+  canEdit?: boolean;
   onUpdatePrice: (id: string, newPrice: number) => void;
 }
 
@@ -277,11 +298,29 @@ const HoverPriceEditor: React.FC<HoverPriceEditorProps> = ({
   supplierCost,
   itemId,
   itemName,
+  canEdit = true,
   onUpdatePrice,
 }) => {
   const [visible, setVisible] = useState(false);
   const enterTimer = useRef<NodeJS.Timeout | null>(null);
   const leaveTimer = useRef<NodeJS.Timeout | null>(null);
+
+  if (canEdit === false) {
+    return (
+      <div
+        className="space-y-0.5 select-none"
+        title="Universal common market product outside your store catalog. Read-only."
+      >
+        <div className="flex items-center gap-1 font-semibold text-[var(--text-secondary)] text-xs tabular-nums">
+          <Lock className="w-3 h-3 text-amber-700/60" />
+          <span>₹{sellingPrice.toLocaleString("en-IN")}</span>
+        </div>
+        <div className="text-[10px] font-mono text-[var(--text-faint)]">
+          Supplier: ₹{supplierCost.toLocaleString("en-IN")}
+        </div>
+      </div>
+    );
+  }
 
   const handleMouseEnter = () => {
     if (leaveTimer.current) {
@@ -356,18 +395,41 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
   const [items, setItems] = useState<CatalogInventoryItem[]>(SAMPLE_SELLER_CATALOG);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [catalogScope, setCatalogScope] = useState<"store" | "market">("store");
+  const [isImporting, setIsImporting] = useState<string | null>(null);
 
-  // Global Real-Time Synchronization (Polls every 2.5s)
+  // Global Real-Time Synchronization (Polls every 2.5s, scoped to store or universal market)
   useEffect(() => {
     let isMounted = true;
 
     const fetchLiveCatalog = async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/seller/catalog`, { cache: "no-store" });
+        const queryParams = new URLSearchParams({
+          merchant_id: profile.merchantId,
+          business_type: profile.businessType,
+          scope: catalogScope,
+        });
+        const res = await fetch(`${BACKEND_URL}/api/seller/catalog?${queryParams.toString()}`, { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
         if (data.items && Array.isArray(data.items) && isMounted) {
-          setItems(data.items);
+          setItems(
+            data.items.map((it: any) => ({
+              id: it.id,
+              name: it.title || it.name,
+              category: it.category || "general",
+              stock: it.inventoryStock ?? it.stock ?? 0,
+              supplierCost: it.supplierCostInr ?? it.supplierCost ?? 0,
+              sellingPrice: it.sellingPriceInr ?? it.sellingPrice ?? 0,
+              marketplaces: it.channels || it.marketplaces || ["AP2 Gateway", "Amazon", "Flipkart"],
+              daysIdle: it.daysInInventory || it.daysIdle || 4,
+              discountPct: it.autoClearanceDiscountPct || it.discountPct || 0,
+              inStock: (it.inventoryStock ?? it.stock ?? 0) > 0 && it.inStock !== false,
+              is_owned: it.is_owned ?? true,
+              can_edit: it.can_edit ?? true,
+              store_status: it.store_status,
+            }))
+          );
         }
       } catch {
         // Silently handle offline/polling error
@@ -380,7 +442,7 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
       isMounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [profile.merchantId, profile.businessType, catalogScope]);
 
   // Voice Search State
   const [isCatalogListening, setIsCatalogListening] = useState(false);
@@ -441,7 +503,7 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
   // Add Product Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newProductName, setNewProductName] = useState("");
-  const [newProductCategory, setNewProductCategory] = useState("groceries");
+  const [newProductCategory, setNewProductCategory] = useState<string>(profile.businessType || "electronics");
   const [newProductCost, setNewProductCost] = useState<number>(280);
   const [newProductPrice, setNewProductPrice] = useState<number>(350);
   const [newProductStock, setNewProductStock] = useState<number>(30);
@@ -484,7 +546,7 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
           category: newProductCategory,
           stock: Number(newProductStock),
           supplier_cost_inr: Number(newProductCost),
-          merchant_id: "demo-merchant.myshopify.com",
+          merchant_id: profile.merchantId,
         }),
       });
 
@@ -501,6 +563,9 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
           daysIdle: 0,
           discountPct: 0,
           inStock: Number(newProductStock) > 0,
+          is_owned: true,
+          can_edit: true,
+          store_status: "In Your Store",
         };
         setItems((prev) => [newItem, ...prev]);
         setAddSuccessMsg(
@@ -521,29 +586,36 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
     }
   };
 
-  useEffect(() => {
-    fetch(`${BACKEND_URL}/api/seller/catalog`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.items && data.items.length > 0) {
-          setItems(
-            data.items.map((it: any) => ({
-              id: it.id,
-              name: it.title,
-              category: it.category || "general",
-              stock: it.inventoryStock ?? 0,
-              supplierCost: it.supplierCostInr ?? 0,
-              sellingPrice: it.sellingPriceInr ?? 0,
-              marketplaces: it.channels || ["AP2 Gateway", "Amazon", "Flipkart"],
-              daysIdle: it.daysInInventory || 4,
-              discountPct: it.autoClearanceDiscountPct || 0,
-              inStock: (it.inventoryStock ?? 0) > 0,
-            }))
-          );
-        }
-      })
-      .catch(() => {});
-  }, []);
+  const handleImportProduct = async (item: CatalogInventoryItem) => {
+    setIsImporting(item.id);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/seller/catalog/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          product_id: item.id,
+          merchant_id: profile.merchantId,
+          stock: 25,
+          price_inr: item.sellingPrice,
+        }),
+      });
+      if (res.ok) {
+        setAddSuccessMsg(`"${item.name}" successfully added to your store! It is now fully editable.`);
+        setTimeout(() => setAddSuccessMsg(null), 4000);
+        setItems((prev) =>
+          prev.map((it) =>
+            it.id === item.id
+              ? { ...it, is_owned: true, can_edit: true, stock: 25, inStock: true, store_status: "In Your Store" }
+              : it
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Failed to import product:", err);
+    } finally {
+      setIsImporting(null);
+    }
+  };
 
   const filtered = items.filter((item) => {
     const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
@@ -585,6 +657,68 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
           <span>{addSuccessMsg}</span>
         </div>
       )}
+
+      {/* Catalog Scope Switcher: Store SKUs vs Universal Common Market */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[var(--brown-faint)]/40 p-3 rounded-2xl border border-[rgba(92,61,46,0.12)]">
+        <div className="flex items-center gap-1.5 p-1 bg-white rounded-xl border border-[rgba(92,61,46,0.12)] shadow-xs">
+          <button
+            type="button"
+            onClick={() => setCatalogScope("store")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+              catalogScope === "store"
+                ? "bg-[var(--brown)] text-white shadow-xs"
+                : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--brown-faint)]/50"
+            }`}
+          >
+            <Store className="w-3.5 h-3.5" />
+            <span>My Store Inventory</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                catalogScope === "store"
+                  ? "bg-white/20 text-white"
+                  : "bg-gray-100 text-[var(--text-muted)]"
+              }`}
+            >
+              {items.filter((it) => it.can_edit !== false).length} SKUs
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCatalogScope("market")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+              catalogScope === "market"
+                ? "bg-[var(--brown)] text-white shadow-xs"
+                : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--brown-faint)]/50"
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>Universal Common Market</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                catalogScope === "market"
+                  ? "bg-white/20 text-white"
+                  : "bg-gray-100 text-[var(--text-muted)]"
+              }`}
+            >
+              All
+            </span>
+          </button>
+        </div>
+
+        <div className="text-xs text-[var(--text-muted)] flex items-center gap-2">
+          {catalogScope === "store" ? (
+            <span className="flex items-center gap-1 text-emerald-800 font-medium">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              Showing products sold by <strong>{profile.storeName}</strong> ({profile.businessType}). Fully editable.
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-amber-900 font-medium">
+              <Lock className="w-3.5 h-3.5 text-amber-700" />
+              Viewing universal common market. Non-store items are read-only (1-click import to sell).
+            </span>
+          )}
+        </div>
+      </div>
 
       {/* Filters & Search */}
       <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
@@ -640,6 +774,7 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
                 <th className="py-3 px-4">Gross Margin</th>
                 <th className="py-3 px-4">Syndicated Channels</th>
                 <th className="py-3 px-4">Clearance Status</th>
+                <th className="py-3 px-4">Store Authority</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgba(92,61,46,0.06)]">
@@ -648,12 +783,24 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
                 const sc = item.supplierCost || 0;
                 const marginInr = sp - sc;
                 const marginPct = sp > 0 ? ((marginInr / sp) * 100).toFixed(1) : "25.0";
+                const isEditable = item.can_edit !== false;
 
                 return (
                   <tr key={item.id} className="hover:bg-[var(--brown-faint)]/20 transition-colors">
                     <td className="py-3.5 px-4 font-medium text-[var(--text-primary)]">
                       <div className="font-semibold text-sm">{item.name}</div>
-                      <span className="text-[10px] font-mono text-[var(--text-faint)]">{item.id}</span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[10px] font-mono text-[var(--text-faint)]">{item.id}</span>
+                        {isEditable ? (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            In Store
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                            Market Only
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3.5 px-4">
                       <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-[var(--brown-faint)] text-[var(--brown)]">
@@ -666,6 +813,7 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
                           stock={item.stock || 0}
                           itemId={item.id}
                           itemName={item.name}
+                          canEdit={isEditable}
                           onUpdateStock={(id, newStock) => {
                             setItems((prev) =>
                               prev.map((it) => (it.id === id ? { ...it, stock: newStock, inStock: newStock > 0 } : it))
@@ -675,11 +823,16 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
                             fetch(`${BACKEND_URL}/api/seller/catalog/update`, {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ product_id: id, stock: newStock }),
+                              body: JSON.stringify({
+                                product_id: id,
+                                stock: newStock,
+                                merchant_id: profile.merchantId,
+                                business_type: profile.businessType,
+                              }),
                             }).catch(() => {});
                           }}
                         />
-                        {(item.stock || 0) === 0 && (
+                        {isEditable && (item.stock || 0) === 0 && (
                           <HoverRestockBadge
                             itemId={item.id}
                             itemName={item.name}
@@ -692,7 +845,12 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
                               fetch(`${BACKEND_URL}/api/seller/catalog/update`, {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ product_id: id, stock: qty }),
+                                body: JSON.stringify({
+                                  product_id: id,
+                                  stock: qty,
+                                  merchant_id: profile.merchantId,
+                                  business_type: profile.businessType,
+                                }),
                               }).catch(() => {});
                             }}
                           />
@@ -705,6 +863,7 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
                         supplierCost={sc}
                         itemId={item.id}
                         itemName={item.name}
+                        canEdit={isEditable}
                         onUpdatePrice={(id, newPrice) => {
                           setItems((prev) =>
                             prev.map((it) => (it.id === id ? { ...it, sellingPrice: newPrice } : it))
@@ -714,7 +873,12 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
                           fetch(`${BACKEND_URL}/api/seller/catalog/update`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ product_id: id, price_inr: newPrice }),
+                            body: JSON.stringify({
+                              product_id: id,
+                              price_inr: newPrice,
+                              merchant_id: profile.merchantId,
+                              business_type: profile.businessType,
+                            }),
                           }).catch(() => {});
                         }}
                       />
@@ -754,6 +918,24 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
                           <Clock className="w-3 h-3 text-[var(--text-faint)]" />
                           <span>{item.daysIdle}d on shelf</span>
                         </div>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      {!isEditable ? (
+                        <button
+                          type="button"
+                          onClick={() => handleImportProduct(item)}
+                          disabled={isImporting === item.id}
+                          className="btn-primary py-1 px-2.5 rounded-lg text-[11px] font-semibold flex items-center gap-1 shadow-xs cursor-pointer whitespace-nowrap"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>{isImporting === item.id ? "Adding..." : "Sell in My Store"}</span>
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Active SKU</span>
+                        </span>
                       )}
                     </td>
                   </tr>

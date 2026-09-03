@@ -18,15 +18,18 @@ export function getBackendUrl(): string {
         return `https://${host.replace("frontend", "backend")}`;
       }
     }
+    // On all client browsers (desktop & mobile LAN), relative paths leverage Next.js proxy rewrites
+    return "";
   }
   return (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 }
 
-export const BACKEND_URL = getBackendUrl();
+export const BACKEND_URL = "";
 
 export async function checkBackendHealth(): Promise<{ status: string; online: boolean }> {
   try {
-    const res = await fetch(`${BACKEND_URL}/healthz`, { cache: "no-store" });
+    const base = getBackendUrl();
+    const res = await fetch(`${base}/healthz`, { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       return { status: data.status, online: true };
@@ -39,7 +42,8 @@ export async function checkBackendHealth(): Promise<{ status: string; online: bo
 
 export async function fetchInvariants(): Promise<Invariant[]> {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/invariants`, { cache: "no-store" });
+    const base = getBackendUrl();
+    const res = await fetch(`${base}/api/invariants`, { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       return data.invariants;
@@ -63,7 +67,7 @@ export async function fetchInvariants(): Promise<Invariant[]> {
 
 export async function fetchCatalog(): Promise<Record<string, MerchantCatalog>> {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/catalog`, { cache: "no-store" });
+    const res = await fetch(`${getBackendUrl()}/api/catalog`, { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       return data.merchants;
@@ -100,7 +104,7 @@ export async function fetchCatalog(): Promise<Record<string, MerchantCatalog>> {
 
 export async function fetchAuditLogs(): Promise<TransactionAuditRecord[]> {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/audit-logs`, { cache: "no-store" });
+    const res = await fetch(`${getBackendUrl()}/api/audit-logs`, { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       return data.transactions;
@@ -112,7 +116,7 @@ export async function fetchAuditLogs(): Promise<TransactionAuditRecord[]> {
 }
 
 export async function submitBuyIntent(req: BuyRequest): Promise<BuyResponse> {
-  const res = await fetch(`${BACKEND_URL}/buy`, {
+  const res = await fetch(`${getBackendUrl()}/buy`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
@@ -140,7 +144,7 @@ export async function streamBuyIntent(
   callbacks: StreamCallbacks
 ): Promise<void> {
   try {
-    const res = await fetch(`${BACKEND_URL}/buy/stream`, {
+    const res = await fetch(`${getBackendUrl()}/buy/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
@@ -290,7 +294,7 @@ export async function createRazorpayOrder(amountPaise: number, currency: string 
   currency: string;
   key_id?: string;
 }> {
-  const res = await fetch(`${BACKEND_URL}/api/create-order`, {
+  const res = await fetch(`${getBackendUrl()}/api/create-order`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ amount: amountPaise, currency }),
@@ -310,7 +314,7 @@ export async function verifyRazorpayPayment(payload: {
   razorpay_payment_id: string;
   razorpay_signature: string;
 }): Promise<{ status: string; message: string; order_id?: string; payment_id?: string }> {
-  const res = await fetch(`${BACKEND_URL}/api/verify-payment`, {
+  const res = await fetch(`${getBackendUrl()}/api/verify-payment`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -326,7 +330,7 @@ export async function verifyRazorpayPayment(payload: {
  * Public JWKS Keys (RFC 7517)
  */
 export async function getPublicJwks(): Promise<{ keys: Array<Record<string, unknown>> }> {
-  const res = await fetch(`${BACKEND_URL}/.well-known/jwks.json`);
+  const res = await fetch(`${getBackendUrl()}/.well-known/jwks.json`);
   if (!res.ok) {
     throw new Error(`Failed to fetch JWKS: HTTP ${res.status}`);
   }
@@ -344,7 +348,7 @@ export async function verifyJwsToken(compactJws: string): Promise<{
   payload: Record<string, unknown>;
   verification_message: string;
 }> {
-  const res = await fetch(`${BACKEND_URL}/api/vault/verify-jws`, {
+  const res = await fetch(`${getBackendUrl()}/api/vault/verify-jws`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ compact_jws: compactJws }),
@@ -370,7 +374,7 @@ export async function submitGovernanceOverride(payload: {
   authorized: boolean;
   timestamp?: string;
 }> {
-  const res = await fetch(`${BACKEND_URL}/api/governance/override`, {
+  const res = await fetch(`${getBackendUrl()}/api/governance/override`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -396,7 +400,7 @@ export async function requestRefund(
   payment_id: string;
   amount_paise?: number;
 }> {
-  const res = await fetch(`${BACKEND_URL}/api/refund`, {
+  const res = await fetch(`${getBackendUrl()}/api/refund`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

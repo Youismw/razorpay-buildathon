@@ -152,3 +152,101 @@ def test_universal_catalog_and_buyer_seller_sync():
     analytics_data = res_analytics.json()
     assert analytics_data["gross_revenue_inr"] > 184500.0
 
+
+def test_seller_inventory_authorization_and_category_scoping():
+    # 1. Fetch store catalog scoped to electronics
+    res_store = client.get("/api/seller/catalog?scope=store&business_type=electronics")
+    assert res_store.status_code == 200
+    store_items = res_store.json()["items"]
+    # Verify all returned items are in electronics or audio
+    assert len(store_items) > 0
+    for item in store_items:
+        assert item["category"] in ["electronics", "audio"] or item["is_owned"] is True
+        assert item["can_edit"] is True
+
+    # 2. An electronics seller attempts to edit an unowned universal grocery item (Farm Fresh White Eggs)
+    res_unauth = client.post(
+        "/api/seller/catalog/update",
+        json={
+            "product_id": "PROD-EGG-REG",
+            "merchant_id": "demo-merchant.myshopify.com",
+            "business_type": "electronics",
+            "stock": 999,
+        },
+    )
+    assert res_unauth.status_code == 403
+    assert "Permission Denied" in res_unauth.json()["detail"]
+
+    # 3. An electronics seller edits a store-owned product (Logitech Mouse) -> allowed
+    res_auth = client.post(
+        "/api/seller/catalog/update",
+        json={
+            "product_id": "PROD-LOGI-MX3S",
+            "merchant_id": "demo-merchant.myshopify.com",
+            "business_type": "electronics",
+            "stock": 77,
+            "price_inr": 8995.0,
+        },
+    )
+    assert res_auth.status_code == 200
+    assert res_auth.json()["product"]["stock"] == 77
+
+    # 4. Import a common market product (e.g. coffee dripper from home category) into the store
+    res_import = client.post(
+        "/api/seller/catalog/import",
+        json={
+            "product_id": "PROD-COF-V60",
+            "merchant_id": "demo-merchant.myshopify.com",
+            "stock": 35,
+            "price_inr": 1899.0,
+        },
+    )
+    assert res_import.status_code == 200
+    assert res_import.json()["status"] == "SUCCESS"
+
+    # Now editing the imported product succeeds
+    res_edit_imported = client.post(
+        "/api/seller/catalog/update",
+        json={
+            "product_id": "PROD-COF-V60",
+            "merchant_id": "demo-merchant.myshopify.com",
+            "business_type": "electronics",
+            "stock": 40,
+        },
+    )
+    assert res_edit_imported.status_code == 200
+    assert res_edit_imported.json()["product"]["stock"] == 40
+
+
+def test_pack_size_does_not_inflate_order_quantity():
+    # Verify initial stock of eggs
+    res_cat = client.get("/api/catalog")
+    init_stock = res_cat.json()["demo-merchant.myshopify.com"]["products"]["PROD-EGG-REG"]["stock"]
+
+    # Buyer orders "Buy Farm Fresh White Eggs (Pack of 6)"
+    res_buy = client.post(
+        "/buy",
+        json={
+            "raw_intent": "Buy Farm Fresh White Eggs (Pack of 6)",
+            "max_spend_inr": 500.0,
+            "allowed_merchants": ["demo-merchant.myshopify.com"],
+            "validity_hours": 24,
+            "llm_provider": "mock",
+        },
+    )
+    assert res_buy.status_code == 200
+    buy_data = res_buy.json()
+    assert buy_data["status"] == "SUCCESS"
+
+    # Inventory must decrement by EXACTLY 1, NOT 6!
+    res_cat_after = client.get("/api/catalog")
+    after_stock = res_cat_after.json()["demo-merchant.myshopify.com"]["products"]["PROD-EGG-REG"]["stock"]
+    assert after_stock == init_stock - 1
+
+    # Check seller order record has quantity 1
+    res_orders = client.get("/api/seller/orders")
+    latest_order = res_orders.json()["orders"][0]
+    assert latest_order["product_id"] == "PROD-EGG-REG"
+    assert latest_order["quantity"] == 1
+
+

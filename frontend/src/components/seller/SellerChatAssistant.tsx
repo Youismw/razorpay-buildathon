@@ -261,7 +261,7 @@ export const SellerChatAssistant: React.FC<SellerChatAssistantProps> = ({
   ];
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-3.5rem)] max-w-5xl mx-auto px-4 sm:px-6 py-4">
+    <div className="flex-1 flex flex-col h-[calc(100dvh-7.5rem)] lg:h-[calc(100vh-3.5rem)] max-w-5xl mx-auto px-3 sm:px-6 py-3 sm:py-4">
       {/* Quick Action Prompt Chips */}
       <div className="flex items-center gap-2 overflow-x-auto pb-3 shrink-0">
         {PROMPT_SHORTCUTS.map((sc) => (

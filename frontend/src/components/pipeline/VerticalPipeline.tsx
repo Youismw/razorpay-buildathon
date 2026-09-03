@@ -322,7 +322,7 @@ export const VerticalPipeline: React.FC<VerticalPipelineProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center w-full max-w-lg mx-auto py-8 space-y-0 relative">
+    <div className="flex flex-col items-center w-full max-w-lg mx-auto py-8 px-4 sm:px-0 space-y-0 relative overflow-visible">
       {stages.map((stage, idx) => {
         const isActive = stage.status === "running";
         const isComplete = stage.status === "success";

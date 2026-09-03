@@ -58,6 +58,12 @@
    Body & Page Background
    Smooth gradient: warm white → gold tint → brown tint
    ═══════════════════════════════════════════════════════════ */
+html {
+  overflow-x: hidden;
+  width: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   background:
     linear-gradient(
@@ -68,14 +74,35 @@ body {
       #EDE0CC 80%,
       #E4D5BD 100%
     );
-  background-attachment: fixed;
   color: var(--text-primary);
   font-family: var(--font-sans);
-  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  overflow-x: hidden;
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Ensure smooth touch scrolling on mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.overflow-y-auto,
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent auto-zoom on mobile inputs */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -90,29 +117,41 @@ body {
   overflow: hidden;
 }
 
-/* The glow layer — a radial gradient that follows the cursor */
-.card::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  background: radial-gradient(
-    300px circle at var(--mouse-x) var(--mouse-y),
-    rgba(196, 162, 101, 0.35),
-    transparent 70%
-  );
-  opacity: 0;
-  transition: opacity 0.4s ease;
-  pointer-events: none;
-  z-index: 0;
+/* On mobile touch devices without hover, show subtle visible border */
+@media (hover: none) {
+  .card {
+    border-color: rgba(92, 61, 46, 0.1);
+  }
+  .card::before {
+    display: none !important;
+  }
 }
 
-.card:hover::before {
-  opacity: 1;
-}
+/* The glow layer — a radial gradient that follows the cursor on hover-capable devices */
+@media (hover: hover) {
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: radial-gradient(
+      300px circle at var(--mouse-x) var(--mouse-y),
+      rgba(196, 162, 101, 0.35),
+      transparent 70%
+    );
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+    z-index: 0;
+  }
 
-.card:hover {
-  background: var(--bg-card-hover);
+  .card:hover::before {
+    opacity: 1;
+  }
+
+  .card:hover {
+    background: var(--bg-card-hover);
+  }
 }
 
 /* Card content sits above the glow layer */

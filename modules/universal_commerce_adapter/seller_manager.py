@@ -120,8 +120,100 @@ def update_seller_profile(profile_data: Dict[str, Any]) -> SellerProfile:
                 "supplier_cost_paise": cost_paise,
             },
         )
+        register_merchant_product(merchant_id, prod_id)
 
     return _current_profile
+
+
+# Primary industry-to-category mapping for merchant catalogs
+BUSINESS_TYPE_CATEGORIES: Dict[str, set] = {
+    "electronics": {"electronics", "audio"},
+    "groceries": {"groceries"},
+    "fashion": {"fashion", "beauty"},
+    "home": {"home"},
+    "books": {"books"},
+    "beauty": {"beauty"},
+    "hardware": {"hardware", "construction"},
+    "construction": {"construction", "hardware"},
+}
+
+# In-memory registry of custom or imported products owned by a specific merchant
+_MERCHANT_OWNED_SKUS: Dict[str, set] = {}
+
+
+def register_merchant_product(merchant_id: str, product_id: str) -> None:
+    """Register a product as explicitly owned/sold by a merchant."""
+    _MERCHANT_OWNED_SKUS.setdefault(merchant_id, set()).add(product_id)
+
+
+def is_product_sold_by_merchant(
+    product_id: str,
+    merchant_id: str = "demo-merchant.myshopify.com",
+    business_type: Optional[str] = None,
+    product_category: Optional[str] = None,
+) -> bool:
+    """
+    Check whether a merchant has selling and editing authority over a product.
+    A merchant sells a product if:
+      1. The product ID is in their explicitly registered/imported store SKUs, OR
+      2. The product category matches the merchant profile's primary business type (e.g. 'electronics' -> 'electronics', 'audio').
+    """
+    # Check explicitly registered/imported SKUs
+    if product_id in _MERCHANT_OWNED_SKUS.get(merchant_id, set()):
+        return True
+
+    # Check routine restock items
+    profile = get_seller_profile()
+    for it in profile.routine_restock_items:
+        clean_slug = re.sub(r"[^a-zA-Z0-9]+", "-", it.product_name).strip("-").upper()
+        if product_id in (f"PROD-{clean_slug[:20]}", it.id):
+            return True
+
+    # If category wasn't passed, find it from DEMO_MERCHANT_CATALOG
+    if not product_category:
+        from modules.guardrail_shell.grounding_oracle import DEMO_MERCHANT_CATALOG
+        for m_id, m_data in DEMO_MERCHANT_CATALOG.items():
+            if product_id in m_data.get("products", {}):
+                product_category = m_data["products"][product_id].get("category", "")
+                break
+
+    # Check business type
+    b_type = business_type or profile.business_type or "electronics"
+    allowed_cats = BUSINESS_TYPE_CATEGORIES.get(b_type, {b_type})
+    if product_category and product_category.lower() in allowed_cats:
+        return True
+
+    return False
+
+
+def get_merchant_owned_products(
+    merchant_id: str = "demo-merchant.myshopify.com",
+    business_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Filter the universal catalog and return only items owned/sold by this merchant."""
+    from modules.guardrail_shell.grounding_oracle import DEMO_MERCHANT_CATALOG
+
+    profile = get_seller_profile()
+    b_type = business_type or profile.business_type or "electronics"
+    allowed_cats = BUSINESS_TYPE_CATEGORIES.get(b_type, {b_type})
+    owned_pids = set(_MERCHANT_OWNED_SKUS.get(merchant_id, set()))
+
+    # Also add restock item IDs
+    for it in profile.routine_restock_items:
+        clean_slug = re.sub(r"[^a-zA-Z0-9]+", "-", it.product_name).strip("-").upper()
+        owned_pids.add(f"PROD-{clean_slug[:20]}")
+
+    m_data = DEMO_MERCHANT_CATALOG.get(merchant_id, {})
+    all_prods = m_data.get("products", {})
+
+    filtered = {}
+    for pid, pdata in all_prods.items():
+        cat = (pdata.get("category") or "").lower()
+        if pid in owned_pids or cat in allowed_cats:
+            filtered[pid] = pdata
+
+    return filtered
+
 
 
 def scan_competitor_prices(
