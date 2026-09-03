@@ -345,7 +345,7 @@ function AppContent() {
         </div>
       )}
 
-      <main className="flex-1 relative z-10 flex flex-col overflow-hidden">
+      <main className="flex-1 relative z-10 flex flex-col min-h-0 w-full">
         {activeTab === "search" && (
           <SearchView
             stages={stages}

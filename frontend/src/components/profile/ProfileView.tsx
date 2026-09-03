@@ -83,8 +83,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   return (
-    <div ref={containerRef} className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8 overflow-y-auto">
-      {/* Header */}
+    <div ref={containerRef} className="flex-1 w-full min-h-0 overflow-y-auto overflow-x-hidden touch-pan-y">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8 pb-32">
+        {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="display-heading text-2xl sm:text-3xl mb-1">
@@ -507,5 +508,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 };

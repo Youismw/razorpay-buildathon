@@ -33,8 +33,9 @@ export const SecurityView: React.FC<SecurityViewProps> = ({ invariants }) => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6 overflow-y-auto">
-      {/* Header */}
+    <div className="flex-1 w-full min-h-0 overflow-y-auto overflow-x-hidden touch-pan-y">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 pb-32">
+        {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="display-heading text-2xl mb-1">Security Invariants</h2>
@@ -196,5 +197,6 @@ export const SecurityView: React.FC<SecurityViewProps> = ({ invariants }) => {
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 };

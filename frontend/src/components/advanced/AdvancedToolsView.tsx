@@ -79,8 +79,9 @@ export const AdvancedToolsView: React.FC = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6 overflow-y-auto">
-      <div>
+    <div className="flex-1 w-full min-h-0 overflow-y-auto overflow-x-hidden touch-pan-y">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 pb-32">
+        <div>
         <h2 className="display-heading text-2xl mb-1">Advanced Tools</h2>
         <p className="text-sm text-[var(--text-muted)]">
           Developer tools for debugging, testing, and inspecting the AP2 protocol internals
@@ -251,5 +252,6 @@ export const AdvancedToolsView: React.FC = () => {
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 };

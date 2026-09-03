@@ -67,102 +67,113 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ catalogs, onBuyItem })
   };
 
   return (
-    <div ref={containerRef} className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6 overflow-y-auto">
-      {/* Header */}
-      <div>
-        <h2 className="display-heading text-2xl mb-1">Verified Merchant Catalog</h2>
-        <p className="text-sm text-[var(--text-muted)]">
-          Products from UCP-connected merchants. Every price and inventory grounded against signed manifests.
-        </p>
-      </div>
-
-      {/* Search + Category Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search products..."
-            className="input pl-10 text-sm py-2.5"
-          />
+    <div ref={containerRef} className="flex-1 w-full min-h-0 overflow-y-auto overflow-x-hidden touch-pan-y">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 pb-32">
+        {/* Header */}
+        <div>
+          <h2 className="display-heading text-2xl mb-1">Verified Merchant Catalog</h2>
+          <p className="text-sm text-[var(--text-muted)]">
+            Products from UCP-connected merchants. Every price and inventory grounded against signed manifests.
+          </p>
         </div>
-        <div className="flex items-center gap-1.5 overflow-x-auto">
-          {CATEGORY_FILTERS.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
-                selectedCategory === cat
-                  ? "bg-[var(--brown)] text-white"
-                  : "text-[var(--text-muted)] hover:bg-[var(--brown-faint)] hover:text-[var(--brown)]"
-              }`}
-            >
-              {cat === "All" ? "All Categories" : cat.charAt(0).toUpperCase() + cat.slice(1)}
-            </button>
-          ))}
+
+        {/* Search + Category Filters */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search products..."
+              className="input pl-10 text-sm py-2.5"
+            />
+          </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            {CATEGORY_FILTERS.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                  selectedCategory === cat
+                    ? "bg-[var(--brown)] text-white"
+                    : "text-[var(--text-muted)] hover:bg-[var(--brown-faint)] hover:text-[var(--brown)]"
+                }`}
+              >
+                {cat === "All" ? "All Categories" : cat.charAt(0).toUpperCase() + cat.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* Product Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((product) => {
-          const priceInr = product.price_paise / 100;
-          return (
-            <div
-              key={product.productId}
-              className="card p-5 flex flex-col justify-between space-y-4 transition-all"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-mono text-[var(--text-faint)] uppercase tracking-wider">
-                    {product.category}
-                  </span>
-                  <span className={`text-[10px] font-mono font-bold ${product.in_stock ? "text-[var(--stage-green)]" : "text-[var(--stage-red)]"}`}>
-                    {product.in_stock ? "● In Stock" : "● Out of Stock"}
-                  </span>
-                </div>
-                <h4 className="text-sm font-semibold text-[var(--text-primary)] leading-snug mb-1">
-                  {product.name}
-                </h4>
-                <p className="text-[11px] font-mono text-[var(--text-faint)]">
-                  {product.merchantId}
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between gap-2 pt-3 border-t border-[rgba(92,61,46,0.08)] flex-wrap sm:flex-nowrap">
+        {/* Product Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((product) => {
+            const priceInr = product.price_paise / 100;
+            return (
+              <div
+                key={product.productId}
+                className="card p-4 sm:p-5 flex flex-col justify-between gap-4 transition-all hover:shadow-md border border-[rgba(92,61,46,0.12)] bg-white"
+              >
                 <div>
-                  <span className="text-[10px] uppercase font-mono tracking-wider text-[var(--text-faint)] block">
-                    Verified Offer
-                  </span>
-                  <span className="text-base font-bold text-[var(--brown-dark)] tabular-nums">
-                    ₹{priceInr.toLocaleString("en-IN", { minimumFractionDigits: 0 })}
-                  </span>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-mono text-[var(--text-faint)] uppercase tracking-wider">
+                      {product.category}
+                    </span>
+                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                      product.in_stock
+                        ? "bg-emerald-50 text-[var(--stage-green)] border border-emerald-200/60"
+                        : "bg-red-50 text-[var(--stage-red)] border border-red-200/60"
+                    }`}>
+                      {product.in_stock ? "● In Stock" : "● Out of Stock"}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-semibold text-[var(--text-primary)] leading-snug mb-1">
+                    {product.name}
+                  </h4>
+                  <p className="text-[11px] font-mono text-[var(--text-faint)]">
+                    {product.merchantId}
+                  </p>
                 </div>
-                <button
-                  onClick={() => handleProductClick(product)}
-                  className={`text-xs py-2 px-3.5 rounded-xl font-semibold inline-flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0 ${
-                    product.in_stock
-                      ? "bg-[var(--brown)] hover:bg-[var(--brown-dark)] text-white shadow-sm hover:shadow-md border border-[var(--gold)]/30"
-                      : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
-                  }`}
-                >
-                  {product.in_stock && <Sparkles className="w-3.5 h-3.5 text-[var(--gold-light)]" />}
-                  <span>{product.in_stock ? "Buy with AI" : "Out of Stock"}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-white/80" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
 
-      {filtered.length === 0 && (
-        <div className="py-16 text-center text-sm text-[var(--text-faint)]">
-          No products match your search.
+                {/* Price & Action Button Row */}
+                <div className="pt-3 border-t border-[rgba(92,61,46,0.1)] flex items-center justify-between gap-3">
+                  <div className="shrink-0">
+                    <span className="text-[10px] uppercase font-mono tracking-wider text-[var(--text-faint)] block">
+                      Verified Offer
+                    </span>
+                    <span className="text-base sm:text-lg font-bold text-[var(--brown-dark)] tabular-nums">
+                      ₹{priceInr.toLocaleString("en-IN", { minimumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleProductClick(product);
+                    }}
+                    className={`py-2 px-3.5 sm:px-4 rounded-xl text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95 shrink-0 ${
+                      product.in_stock
+                        ? "bg-[var(--brown)] hover:bg-[var(--brown-dark)] text-white shadow-xs border border-[var(--gold)]/40 hover:shadow-md"
+                        : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+                    }`}
+                  >
+                    {product.in_stock && <Sparkles className="w-3.5 h-3.5 text-[var(--gold-light)]" />}
+                    <span>{product.in_stock ? "Buy with AI" : "Out of Stock"}</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-white/80" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
-      )}
+
+        {filtered.length === 0 && (
+          <div className="py-16 text-center text-sm text-[var(--text-faint)]">
+            No products match your search.
+          </div>
+        )}
+      </div>
 
       {/* Out of Stock Notice & Alternative Brand Discovery Modal */}
       {outOfStockItem && (
