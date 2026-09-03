@@ -351,7 +351,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
   const settlementStage = stages.find((s) => s.id === "SETTLEMENT");
 
   return (
-    <div ref={containerRef} className="flex-1 flex flex-col overflow-y-scroll overflow-x-hidden" style={{ scrollbarGutter: "stable" }}>
+    <div ref={containerRef} className="flex-1 w-full min-h-0 flex flex-col overflow-y-auto overflow-x-hidden touch-pan-y" style={{ scrollbarGutter: "stable" }}>
       <AnimatePresence mode="wait">
         {!isPipelineActive ? (
           /* ═══ Chat-First Search View ═══ */

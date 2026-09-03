@@ -145,19 +145,19 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({ onBack }) => {
         <Image src="/seller-bg.jpg" alt="" fill sizes="100vw" className="object-cover" />
       </div>
 
-      {/* Seller Header Navbar */}
-      <SellerNavbar
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        onBackToBuyer={onBack}
-        sellerMode={sellerMode}
-        onToggleSellerMode={setSellerMode}
-        profile={profile}
-      />
+      <ZoomContainer className="min-h-screen">
+        {/* Seller Header Navbar */}
+        <SellerNavbar
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+          onBackToBuyer={onBack}
+          sellerMode={sellerMode}
+          onToggleSellerMode={setSellerMode}
+          profile={profile}
+        />
 
-      {/* Main Tab Views */}
-      <main className="flex-1 relative z-10 flex flex-col min-h-0">
-        <ZoomContainer>
+        {/* Main Tab Views */}
+        <main className="flex-1 relative z-10 flex flex-col min-h-0">
           {activeTab === "chat" && (
             <SellerChatAssistant
               profile={profile}
@@ -196,8 +196,8 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({ onBack }) => {
               onSaveProfile={handleUpdateProfile}
             />
           )}
-        </ZoomContainer>
-      </main>
+        </main>
+      </ZoomContainer>
     </div>
   );
 };

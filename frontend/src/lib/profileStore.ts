@@ -21,6 +21,7 @@ export interface UserProfileState {
   allowPurchaseTracking: boolean;
   showRatesInChat: boolean;
   alwaysConfirmQuantity: boolean;
+  hasConfiguredPin?: boolean;
 }
 
 export const DEFAULT_USER_PROFILE: UserProfileState = {
@@ -29,6 +30,7 @@ export const DEFAULT_USER_PROFILE: UserProfileState = {
   monthlyLimitInr: 25000,
   autonomyMode: "autonomous",
   userPin: "1234",
+  hasConfiguredPin: false,
   dietaryPreference: "Vegetarian / Organic First",
   favoriteBrands: ["Amul", "Blue Tokai", "Aashirvaad", "Sony", "Britannia"],
   usualGroceryList: [

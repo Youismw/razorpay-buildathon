@@ -301,53 +301,60 @@ function AppContent() {
         <Image src="/buyer-bg.jpg" alt="" fill sizes="100vw" className="object-cover" priority />
       </div>
 
-      <BuyerNavbar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        searchMode={searchMode}
-        onToggleSearchMode={() => setSearchMode((m) => (m === "basic" ? "advanced" : "basic"))}
-        onBack={() => setRole("none")}
-        backendOnline={backendOnline}
-        autonomyMode={profile.autonomyMode}
-        onToggleAutonomyMode={() => {
-          if (profile.autonomyMode === "autonomous") {
-            // Prompt user to choose and set their password before entering manual mode
-            setIsSetPinModalOpen(true);
-          } else {
-            const updated: UserProfileState = { ...profile, autonomyMode: "autonomous" };
-            setProfile(updated);
-            saveUserProfile(updated);
-            showToast("Autonomous AI Enabled", "Transactions settle automatically via UPI Autopay", "info");
-          }
-        }}
-      />
-
-      {!backendOnline && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 text-xs flex items-center justify-between text-amber-900 z-30 relative backdrop-blur-xs">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-            <span>
-              Backend Disconnected. Target: <strong className="font-mono text-amber-950">{getBackendUrl()}</strong>
-            </span>
-          </div>
-          <button
-            onClick={() => {
-              const current = getBackendUrl();
-              const url = prompt("Enter your Render Backend URL (e.g. https://your-backend.onrender.com):", current);
-              if (url && url.trim()) {
-                localStorage.setItem("ap2_backend_url", url.trim());
-                window.location.reload();
+      <ZoomContainer className="min-h-screen">
+        <BuyerNavbar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          searchMode={searchMode}
+          onToggleSearchMode={() => setSearchMode((m) => (m === "basic" ? "advanced" : "basic"))}
+          onBack={() => setRole("none")}
+          backendOnline={backendOnline}
+          autonomyMode={profile.autonomyMode}
+          onToggleAutonomyMode={() => {
+            if (profile.autonomyMode === "autonomous") {
+              // Only prompt user to set password if never configured before
+              if (profile.hasConfiguredPin) {
+                const updated: UserProfileState = { ...profile, autonomyMode: "pin_required" };
+                setProfile(updated);
+                saveUserProfile(updated);
+                showToast("Manual Mode Enabled", "Transactions require your configured PIN.", "info");
+              } else {
+                setIsSetPinModalOpen(true);
               }
-            }}
-            className="px-2 py-0.5 rounded bg-amber-200/80 hover:bg-amber-300 text-amber-950 font-medium text-[11px] transition-colors cursor-pointer"
-          >
-            Configure Backend URL
-          </button>
-        </div>
-      )}
+            } else {
+              const updated: UserProfileState = { ...profile, autonomyMode: "autonomous" };
+              setProfile(updated);
+              saveUserProfile(updated);
+              showToast("Autonomous AI Enabled", "Transactions settle automatically via UPI Autopay", "info");
+            }
+          }}
+        />
 
-      <main className="flex-1 relative z-10 flex flex-col min-h-0 w-full">
-        <ZoomContainer>
+        {!backendOnline && (
+          <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 text-xs flex items-center justify-between text-amber-900 z-30 relative backdrop-blur-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              <span>
+                Backend Disconnected. Target: <strong className="font-mono text-amber-950">{getBackendUrl()}</strong>
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                const current = getBackendUrl();
+                const url = prompt("Enter your Render Backend URL (e.g. https://your-backend.onrender.com):", current);
+                if (url && url.trim()) {
+                  localStorage.setItem("ap2_backend_url", url.trim());
+                  window.location.reload();
+                }
+              }}
+              className="px-2 py-0.5 rounded bg-amber-200/80 hover:bg-amber-300 text-amber-950 font-medium text-[11px] transition-colors cursor-pointer"
+            >
+              Configure Backend URL
+            </button>
+          </div>
+        )}
+
+        <main className="flex-1 relative z-10 flex flex-col min-h-0 w-full">
           {activeTab === "search" && (
             <SearchView
               stages={stages}
@@ -380,8 +387,8 @@ function AppContent() {
           )}
           {activeTab === "mandates" && <MandatesView />}
           {activeTab === "advanced" && <AdvancedToolsView />}
-        </ZoomContainer>
-      </main>
+        </main>
+      </ZoomContainer>
 
       {/* UPI PIN Confirmation Modal */}
       <PinPromptModal
@@ -400,7 +407,12 @@ function AppContent() {
       <SetPinModal
         isOpen={isSetPinModalOpen}
         onSave={(newPin) => {
-          const updated: UserProfileState = { ...profile, autonomyMode: "pin_required", userPin: newPin };
+          const updated: UserProfileState = {
+            ...profile,
+            autonomyMode: "pin_required",
+            userPin: newPin,
+            hasConfiguredPin: true,
+          };
           setProfile(updated);
           saveUserProfile(updated);
           setIsSetPinModalOpen(false);

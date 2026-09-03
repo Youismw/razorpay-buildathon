@@ -37,8 +37,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   useCardGlow(containerRef);
 
   const handleSave = () => {
-    saveUserProfile(formData);
-    onUpdateProfile(formData);
+    const updated = {
+      ...formData,
+      hasConfiguredPin: true,
+    };
+    setFormData(updated);
+    saveUserProfile(updated);
+    onUpdateProfile(updated);
     onShowToast("Profile Updated", "Governance limits, security PIN, and grocery preferences saved.", "success");
   };
 
