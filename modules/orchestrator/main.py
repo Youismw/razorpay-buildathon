@@ -965,8 +965,7 @@ def buy(req: BuyRequest):
     # ========================================================
     # STAGE 2: LLM Reasoning (Probabilistic Layer)
     # ========================================================
-    is_unknown_item = any(w in req.raw_intent.lower() for w in ["quantum", "hyperdrive", "teleportation", "flux capacitor"])
-    if req.simulate_failure_stage == 2 or req.llm_provider == "fail-reasoning" or is_unknown_item:
+    if req.simulate_failure_stage == 2 or req.llm_provider == "fail-reasoning":
         err_msg = "Reasoning Failure: No matching product found in merchant catalog for ungrounded query schema."
         paths = write_transaction_audit_files(
             trace_id=trace_id,
@@ -1004,6 +1003,51 @@ def buy(req: BuyRequest):
         )
         proposal_dict = reasoning_result.proposal
         ai_thought_steps = reasoning_result.thought_steps
+
+        # Intercept if reasoning agent could not find a matching product
+        is_empty_or_not_found = (
+            proposal_dict.get("is_not_found")
+            or proposal_dict.get("total_price_paise", 0) <= 0
+            or any(item.get("product_id") == "PROD-NOT-FOUND" for item in proposal_dict.get("items", []))
+        )
+        if is_empty_or_not_found:
+            ai_summary = proposal_dict.get("reasoning_summary") or f"No product matching '{req.raw_intent}' found in catalog."
+            is_ambiguous = (
+                proposal_dict.get("is_ambiguous")
+                or "elaborate" in ai_summary.lower()
+                or "clarify" in ai_summary.lower()
+                or "unintelligible" in ai_summary.lower()
+                or "gibberish" in ai_summary.lower()
+            )
+            err_msg = f"Ambiguous Request: {ai_summary}" if is_ambiguous else f"Product Not Found: {ai_summary}"
+            paths = write_transaction_audit_files(
+                trace_id=trace_id,
+                status="FAILED",
+                decision="REASONING_ERROR",
+                raw_intent=req.raw_intent,
+                constraint_hash=constraint_hash,
+                total_price_paise=None,
+                confidence_score=None,
+                reasoning_summary=ai_summary,
+                ai_thought_steps=ai_thought_steps,
+                mandate_id=None,
+                compact_jws=None,
+                audit_trail=audit_trail,
+                error=err_msg,
+            )
+            return BuyResponse(
+                trace_id=trace_id,
+                status="FAILED",
+                decision="REASONING_ERROR",
+                constraint_hash=constraint_hash,
+                error=err_msg,
+                ai_thought_steps=ai_thought_steps,
+                audit_trail=audit_trail,
+                audit_json_path=paths["json_path"],
+                audit_md_path=paths["md_path"],
+                audit_jsonl_path=paths["jsonl_path"],
+            )
+
         audit_trail.append({
             "stage": "LLM_REASONING",
             "timestamp": ts(),
@@ -1154,8 +1198,7 @@ def buy(req: BuyRequest):
     # ========================================================
     # STAGE 4: Mandate Vault Signing (Deterministic Layer)
     # ========================================================
-    is_injection_or_key_fault = any(w in req.raw_intent.lower() for w in ["ignore previous", "external wallet", "key mismatch", "prompt injection"])
-    if req.simulate_failure_stage == 4 or is_injection_or_key_fault:
+    if req.simulate_failure_stage == 4:
         err_msg = "Vault Signing Error: Cryptographic integrity failure: ES256 key mismatch / adversarial security gate block (INV-009 / INV-008)"
         paths = write_transaction_audit_files(
             trace_id=trace_id,
@@ -1239,8 +1282,7 @@ def buy(req: BuyRequest):
     # ========================================================
     # STAGE 5: Settlement Record (Ledger)
     # ========================================================
-    is_unauthorized_or_revoked = any(w in req.raw_intent.lower() for w in ["unverified", "shady-site", "revocation", "unauthorized-merchant"]) or (req.allowed_merchants and "unauthorized-merchant.com" in req.allowed_merchants)
-    if req.simulate_failure_stage == 5 or is_unauthorized_or_revoked:
+    if req.simulate_failure_stage == 5:
         err_msg = "Settlement Block: 403 MANDATE_REVOKED: Mandate was revoked prior to settlement (Atomic Lock INV-004) / Merchant Scope Unauthorized."
         paths = write_transaction_audit_files(
             trace_id=trace_id,
@@ -1438,8 +1480,7 @@ async def buy_stream(req: BuyRequest):
         await asyncio.sleep(0.4)
 
         # 2. AI Reasoning
-        is_unknown_item = any(w in req.raw_intent.lower() for w in ["quantum", "hyperdrive", "teleportation", "flux capacitor"])
-        if req.simulate_failure_stage == 2 or req.llm_provider == "fail-reasoning" or is_unknown_item:
+        if req.simulate_failure_stage == 2 or req.llm_provider == "fail-reasoning":
             err_msg = "Reasoning Failure: No matching product found in merchant catalog for ungrounded query schema."
             yield f"data: {json.dumps({'event': 'AI_THOUGHT', 'step_index': 1, 'text': f'Parsed buyer intent -> Query \"{req.raw_intent}\" not indexed in merchant UCP catalog.', 'timestamp': ts()})}\n\n"
             await asyncio.sleep(0.2)
@@ -1470,7 +1511,15 @@ async def buy_stream(req: BuyRequest):
                 or any(item.get("product_id") == "PROD-NOT-FOUND" for item in proposal_dict.get("items", []))
             )
             if is_empty_or_not_found:
-                err_msg = f"Reasoning Intercept: No in-stock product in merchant catalog satisfies query '{req.raw_intent}' within budget ₹{req.max_spend_inr:.2f}."
+                ai_summary = proposal_dict.get("reasoning_summary") or f"No product matching '{req.raw_intent}' found in merchant catalog."
+                is_ambiguous = (
+                    proposal_dict.get("is_ambiguous")
+                    or "elaborate" in ai_summary.lower()
+                    or "clarify" in ai_summary.lower()
+                    or "unintelligible" in ai_summary.lower()
+                    or "gibberish" in ai_summary.lower()
+                )
+                err_msg = f"Ambiguous Request: {ai_summary}" if is_ambiguous else f"Product Not Found: {ai_summary}"
                 yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'LLM_REASONING', 'error': err_msg, 'timestamp': ts()})}\n\n"
                 yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'REASONING_ERROR', 'error': err_msg, 'timestamp': ts()})}\n\n"
                 return
@@ -1535,8 +1584,7 @@ async def buy_stream(req: BuyRequest):
         await asyncio.sleep(0.35)
 
         # 4. Mandate Vault Signing
-        is_injection_or_key_fault = any(w in req.raw_intent.lower() for w in ["ignore previous", "external wallet", "key mismatch", "prompt injection"])
-        if req.simulate_failure_stage == 4 or is_injection_or_key_fault:
+        if req.simulate_failure_stage == 4:
             err_msg = "Vault Signing Error: Cryptographic integrity failure: ES256 key mismatch / adversarial security gate block (INV-009 / INV-008)"
             yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'VAULT_SIGNING', 'error': err_msg, 'timestamp': ts()})}\n\n"
             yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'VAULT_SIGNING_ERROR', 'error': err_msg, 'timestamp': ts()})}\n\n"
@@ -1571,8 +1619,7 @@ async def buy_stream(req: BuyRequest):
         await asyncio.sleep(0.35)
 
         # 5. Settlement
-        is_unauthorized_or_revoked = any(w in req.raw_intent.lower() for w in ["unverified", "shady-site", "revocation", "unauthorized-merchant"]) or (req.allowed_merchants and "unauthorized-merchant.com" in req.allowed_merchants)
-        if req.simulate_failure_stage == 5 or is_unauthorized_or_revoked:
+        if req.simulate_failure_stage == 5:
             err_msg = "Settlement Block: 403 MANDATE_REVOKED: Mandate was revoked prior to settlement (Atomic Lock INV-004) / Merchant Scope Unauthorized."
             yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'SETTLEMENT', 'error': err_msg, 'timestamp': ts()})}\n\n"
             yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'SETTLEMENT_ERROR', 'error': err_msg, 'timestamp': ts()})}\n\n"

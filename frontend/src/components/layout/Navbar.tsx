@@ -1,7 +1,19 @@
 "use client";
 
 import React from "react";
-import { Shield, ArrowLeft, Settings } from "lucide-react";
+import {
+  Shield,
+  ArrowLeft,
+  Search,
+  Package,
+  Sliders,
+  ShieldCheck,
+  Receipt,
+  CreditCard,
+  Cpu,
+  Bot,
+  UserCheck,
+} from "lucide-react";
 
 export type BuyerTab = "search" | "catalog" | "profile" | "security" | "history" | "mandates" | "advanced";
 
@@ -15,6 +27,16 @@ interface BuyerNavbarProps {
   autonomyMode?: "autonomous" | "pin_required";
 }
 
+const BUYER_NAV_ITEMS = [
+  { id: "search", label: "Search", icon: Search },
+  { id: "catalog", label: "Catalog", icon: Package },
+  { id: "profile", label: "Personalization & Limits", icon: Sliders },
+  { id: "security", label: "Security Rules", icon: ShieldCheck },
+  { id: "history", label: "Transaction History", icon: Receipt },
+  { id: "mandates", label: "UPI Mandates", icon: CreditCard },
+  { id: "advanced", label: "Advanced Tools", icon: Cpu },
+] as const;
+
 export const BuyerNavbar: React.FC<BuyerNavbarProps> = ({
   activeTab,
   setActiveTab,
@@ -24,83 +46,128 @@ export const BuyerNavbar: React.FC<BuyerNavbarProps> = ({
   backendOnline,
   autonomyMode = "autonomous",
 }) => {
-  const tabs: Array<{ id: BuyerTab; label: string }> = [
-    { id: "search", label: "Search" },
-    { id: "catalog", label: "Catalog" },
-    { id: "profile", label: "Personalization & Limits" },
-    { id: "security", label: "Security Rules" },
-    { id: "history", label: "Transaction History" },
-    { id: "mandates", label: "UPI Mandates" },
-    { id: "advanced", label: "Advanced Tools" },
-  ];
-
   return (
-    <header className="sticky top-0 z-40 backdrop-blur-md bg-[var(--white)]/80 border-b border-[rgba(92,61,46,0.08)]">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        {/* Top row */}
-        <div className="h-14 flex items-center justify-between">
-          {/* Left: Back + Brand */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onBack}
-              className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--brown)] hover:bg-[var(--brown-faint)] transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
+    <header className="sticky top-0 z-40 backdrop-blur-md bg-[var(--white)]/90 border-b border-[rgba(92,61,46,0.08)] shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+        {/* Left: Back + Buyer Branding */}
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={onBack}
+            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--brown)] hover:bg-[var(--brown-faint)] transition-colors inline-flex items-center gap-1.5 text-xs font-medium"
+            title="Switch to Role Selection"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Role Selection</span>
+          </button>
 
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-md bg-[var(--brown)] flex items-center justify-center">
-                <Shield className="w-3.5 h-3.5 text-[var(--gold-light)]" />
-              </div>
-              <span className="text-sm font-semibold text-[var(--brown-dark)]">
+          <div className="h-4 w-[1px] bg-[rgba(92,61,46,0.15)]" />
+
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-md bg-[var(--brown)] flex items-center justify-center shadow-sm">
+              <Shield className="w-3.5 h-3.5 text-[var(--gold-light)]" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-[var(--brown-dark)] block leading-tight">
                 AP2 Buyer
               </span>
-            </div>
-          </div>
-
-          {/* Right: Mode toggle + status */}
-          <div className="flex items-center gap-3">
-            {/* Basic / Advanced toggle */}
-            <button
-              onClick={onToggleSearchMode}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border border-[rgba(92,61,46,0.12)] hover:border-[var(--gold)]"
-            >
-              <Settings className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-              <span className="text-[var(--text-secondary)]">
-                {searchMode === "basic" ? "Basic Mode" : "Advanced Mode"}
+              <span className="text-[10px] font-mono text-[var(--text-faint)]">
+                Autonomous Bridge
               </span>
-              <span className={`w-1.5 h-1.5 rounded-full ${
-                searchMode === "advanced" ? "bg-[var(--gold)]" : "bg-[var(--text-faint)]"
-              }`} />
-            </button>
-
-            {/* Backend status */}
-            <div className="flex items-center gap-1.5 text-xs font-mono text-[var(--text-muted)]">
-              <span className={`w-1.5 h-1.5 rounded-full ${backendOnline ? "bg-[var(--stage-green)]" : "bg-[var(--gold)]"}`} />
-              <span>{backendOnline ? "Live" : "Simulated"}</span>
             </div>
           </div>
         </div>
 
-        {/* Tab strip */}
-        <nav className="flex items-center gap-1 -mb-px overflow-x-auto">
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
+        {/* Center: Tabs in 1 Unified Row */}
+        <nav className="hidden xl:flex items-center gap-1 bg-[var(--brown-faint)]/50 p-1 rounded-xl border border-[rgba(92,61,46,0.06)]">
+          {BUYER_NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
             return (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`py-2.5 px-4 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                key={item.id}
+                onClick={() => setActiveTab(item.id as BuyerTab)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   isActive
-                    ? "border-[var(--gold)] text-[var(--brown-dark)] font-semibold"
-                    : "border-transparent text-[var(--text-muted)] hover:text-[var(--brown)] hover:border-[rgba(196,162,101,0.3)]"
+                    ? "bg-[var(--white)] text-[var(--brown-dark)] font-semibold shadow-xs"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--white)]/50"
                 }`}
               >
-                {tab.label}
+                <Icon className={`w-3.5 h-3.5 ${isActive ? "text-[var(--brown)]" : "text-[var(--text-faint)]"}`} />
+                <span>{item.label}</span>
               </button>
             );
           })}
         </nav>
+
+        {/* Right: Mode Switcher + Autonomy Indicator */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Mode Switcher (Basic / Advanced Toggle) */}
+          <div className="flex items-center bg-[var(--brown-faint)] p-0.5 rounded-lg border border-[rgba(92,61,46,0.08)]">
+            <button
+              onClick={() => searchMode !== "basic" && onToggleSearchMode()}
+              className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
+                searchMode === "basic"
+                  ? "bg-white text-[var(--brown-dark)] shadow-xs font-semibold"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              Basic
+            </button>
+            <button
+              onClick={() => searchMode !== "advanced" && onToggleSearchMode()}
+              className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
+                searchMode === "advanced"
+                  ? "bg-white text-[var(--brown-dark)] shadow-xs font-semibold"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              Advanced
+            </button>
+          </div>
+
+          {/* Autonomy Badge */}
+          <div
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono border ${
+              autonomyMode === "autonomous"
+                ? "bg-[var(--gold-faint)] border-[var(--gold)] text-[var(--brown)] font-medium"
+                : "bg-[rgba(92,61,46,0.05)] border-[rgba(92,61,46,0.15)] text-[var(--text-muted)]"
+            }`}
+          >
+            {autonomyMode === "autonomous" ? (
+              <>
+                <Bot className="w-3.5 h-3.5 text-[var(--brown)]" />
+                <span className="hidden sm:inline">Autonomous AI</span>
+              </>
+            ) : (
+              <>
+                <UserCheck className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                <span className="hidden sm:inline">Manual Approval</span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Responsive View (below xl screen width) */}
+      <div className="xl:hidden flex items-center gap-1 overflow-x-auto px-4 py-1.5 border-t border-[rgba(92,61,46,0.06)] bg-[var(--white)]">
+        {BUYER_NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id as BuyerTab)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] whitespace-nowrap transition-all ${
+                isActive
+                  ? "bg-[var(--brown-faint)] text-[var(--brown-dark)] font-semibold"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              <Icon className="w-3 h-3" />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
       </div>
     </header>
   );

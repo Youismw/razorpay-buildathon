@@ -73,13 +73,68 @@ function formatHumanFriendlyError(rawError: string, stageId: string): FriendlyEr
     };
   }
 
-  // 3. Policy Ceiling Breach / Budget Overspend (INV-010)
+  // 3. Ambiguous / Unintelligible Request (Stage 1 / Stage 2)
+  if (
+    lower.includes("ambiguous") ||
+    lower.includes("elaborate") ||
+    lower.includes("clarify") ||
+    lower.includes("unintelligible") ||
+    lower.includes("gibberish") ||
+    err.startsWith("Ambiguous Request: ")
+  ) {
+    const cleanReason = err.startsWith("Ambiguous Request: ")
+      ? err.replace("Ambiguous Request: ", "")
+      : "";
+
+    return {
+      title: "Please Elaborate on Your Request",
+      summary:
+        cleanReason ||
+        "The request does not describe a recognizable product or shopping category. Please clarify what you are looking to purchase.",
+      action: "Try specifying an item name, brand, or category (e.g., 'Buy wireless headphones under ₹5,000' or 'Order groceries').",
+      invariantBadge: "INTENT · Natural Language Disambiguation",
+      technicalDetails:
+        err || "Reasoning Core: Unintelligible or ambiguous natural language query.",
+    };
+  }
+
+  // 4. Reasoning / Product Not Found in Catalog (Stage 2)
+  if (
+    stageId === "LLM_REASONING" ||
+    lower.includes("not found") ||
+    lower.includes("no matching product") ||
+    lower.includes("no in-stock product") ||
+    lower.includes("ungrounded") ||
+    lower.includes("prod-not-found") ||
+    lower.includes("product not found") ||
+    lower.includes("reasoning failure") ||
+    lower.includes("zero candidate") ||
+    lower.includes("zero matching")
+  ) {
+    const cleanReason = err.startsWith("Product Not Found: ")
+      ? err.replace("Product Not Found: ", "")
+      : err.startsWith("Reasoning Intercept: ")
+      ? err.replace("Reasoning Intercept: ", "")
+      : "";
+
+    return {
+      title: "No Matching Product in Catalog",
+      summary:
+        cleanReason ||
+        "The AI reasoning agent searched registered merchant catalogs and inventories, but found no verified product matching your request.",
+      action: "Check the Catalog tab to see available products (e.g., Electronics, Audio, Groceries) or ask the merchant to list this SKU.",
+      invariantBadge: "GROUNDING · Grounding Oracle Gate",
+      technicalDetails:
+        err || "Reasoning Core: No verifiable catalog candidate found matching prompt constraints.",
+    };
+  }
+
+  // 4. Policy Ceiling Breach / Budget Overspend (INV-010)
   if (
     lower.includes("ceiling") ||
-    lower.includes("budget") ||
-    lower.includes("spend") ||
+    lower.includes("spend_exceeded") ||
     lower.includes("inv-010") ||
-    lower.includes("limit")
+    (stageId === "GUARDRAIL_SHELL" && (lower.includes("budget") || lower.includes("spend") || lower.includes("limit")))
   ) {
     return {
       title: "Transaction Exceeds Spending Ceiling",
@@ -92,7 +147,7 @@ function formatHumanFriendlyError(rawError: string, stageId: string): FriendlyEr
     };
   }
 
-  // 4. Merchant Scope Unauthorized (INV-002)
+  // 5. Merchant Scope Unauthorized (INV-002)
   if (
     lower.includes("merchant") ||
     lower.includes("scope") ||
@@ -109,7 +164,7 @@ function formatHumanFriendlyError(rawError: string, stageId: string): FriendlyEr
     };
   }
 
-  // 5. Short or Ambiguous Intent (Stage 1)
+  // 6. Short or Ambiguous Intent (Stage 1)
   if (
     stageId === "CONSTRAINT_COMPILATION" ||
     lower.includes("compiler") ||
@@ -124,24 +179,6 @@ function formatHumanFriendlyError(rawError: string, stageId: string): FriendlyEr
       invariantBadge: "RFC 8785 · Canonical Constraint Compiler",
       technicalDetails:
         err || "Compiler Rejection: Buyer intent string too short or lacks unambiguous target entity.",
-    };
-  }
-
-  // 6. Reasoning / Grounding failure (Stage 2)
-  if (
-    stageId === "LLM_REASONING" ||
-    lower.includes("grounding") ||
-    lower.includes("candidate") ||
-    lower.includes("catalog")
-  ) {
-    return {
-      title: "Product Not Found In Verified Catalog",
-      summary:
-        "The reasoning core searched registered merchant inventories but found no verified product matching your exact request.",
-      action: "Check catalog stock or ask the seller assistant to list this item.",
-      invariantBadge: "GROUNDING · Grounding Oracle Gate",
-      technicalDetails:
-        err || "Reasoning Core: No verifiable catalog candidate found matching prompt constraints.",
     };
   }
 
@@ -533,7 +570,7 @@ export const VerticalPipeline: React.FC<VerticalPipelineProps> = ({
                         return (
                           <div className="space-y-2 pt-1">
                             <div className="flex items-center justify-between">
-                              <span className="font-semibold text-emerald-700">
+                              <span className="font-semibold text-emerald-700 tabular-nums">
                                 Settled: ₹{Number(stage.data.total_inr).toFixed(2)} via UPI Autopay
                               </span>
                               <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono">

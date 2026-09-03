@@ -66,6 +66,9 @@ def _build_system_prompt() -> str:
         "3. Only propose products that exist in the provided merchant catalog and are in_stock.\n"
         "4. thought_steps MUST contain at least 3-4 detailed deliberation steps.\n"
         "5. Do NOT include any markdown code fences, backticks, or text outside the raw JSON object.\n"
+        "6. If NO product in the catalog matches what the buyer wants (e.g. the requested item is not sold in the catalog), set items to [] and total_price_paise to 0, and state clearly in reasoning_summary and thought_steps that no matching product exists in the catalog.\n"
+        "7. If a requested product or brand is out of stock, you have autonomous authority to select a verified in-stock alternative brand from the same category within budget, explicitly detailing the substitution rationale in thought_steps and reasoning_summary.\n"
+        "8. If the buyer's request is gibberish, nonsensical, ambiguous, or lacks a coherent shopping entity (e.g. 'yaya ka pika bu j'), set items to [], total_price_paise to 0, set is_ambiguous to true, and in reasoning_summary politely ask: 'Please elaborate on what you mean. Your request does not match any recognizable product or shopping category.'\n"
     )
 
 
@@ -261,22 +264,22 @@ def _generate_mock_proposal(constraints: CompiledConstraints, catalog: Dict[str,
             thought_steps.append(
                 f"Buyer specifically requested '{target_prod['name']}' (match score: {top_score}). "
                 f"Price ₹{prod_inr:.2f} exceeds compiled budget ceiling ₹{max_inr:.2f}. "
-                f"Rejecting proposal to prevent unsupervised policy overspend (INV-010)."
+                f"Forwarding proposal to Guardrail Shell for deterministic policy enforcement (INV-010)."
             )
             return {
                 "proposal_id": proposal_id,
                 "intent_id": constraints.intent_id,
                 "constraint_hash": constraints.constraint_hash,
                 "items": [{
-                    "product_id": "PROD-NOT-FOUND",
+                    "product_id": target_pid,
                     "product_name": target_prod["name"],
                     "merchant_id": target_merchant,
-                    "offer_price_paise": 0,
+                    "offer_price_paise": target_prod["price_paise"],
                     "quantity": 1,
                     "currency": "INR",
                     "category": target_prod.get("category", "general"),
                 }],
-                "total_price_paise": 0,
+                "total_price_paise": target_prod["price_paise"],
                 "reasoning_summary": f"Target product '{target_prod['name']}' @ ₹{prod_inr:.2f} exceeds budget limit of ₹{max_inr:.2f}.",
             }, thought_steps
 
@@ -388,7 +391,24 @@ def _generate_mock_proposal(constraints: CompiledConstraints, catalog: Dict[str,
             thought_steps.append(f"Matched general in-stock item '{best_item['name']}' within budget ceiling.")
 
     if best_item is None:
-        thought_steps.append("Concluding reasoning: No in-stock product satisfies all compiled constraints.")
+        KNOWN_COMMERCE_TERMS = {
+            "buy", "order", "purchase", "headphones", "earbuds", "speaker", "phone", "watch", "mouse", "keyboard",
+            "coffee", "milk", "tea", "bread", "butter", "eggs", "atta", "flour", "sneakers", "shoes", "bag",
+            "potash", "alum", "sugar", "salt", "oil", "rice", "dal", "soap", "shampoo", "cream", "sunglasses",
+            "laptop", "screen", "cable", "charger", "monitor", "socks", "shirt", "pants", "groceries", "food",
+            "groceries", "electronics", "audio", "fashion", "wireless", "bluetooth"
+        }
+        has_known_term = any(w in KNOWN_COMMERCE_TERMS for w in query_words)
+        is_ambiguous = not has_known_term and len(query_words) > 0
+
+        if is_ambiguous:
+            thought_steps.append(f"Analyzed intent: Input '{constraints.raw_intent}' lacks recognizable shopping intent.")
+            thought_steps.append("Requesting buyer elaboration to formulate structured purchase constraints.")
+            summary = f"Please elaborate on what you mean. Your request ('{constraints.raw_intent}') does not match any recognizable product or shopping category."
+        else:
+            thought_steps.append(f"Concluding reasoning: No verified in-stock product found matching '{constraints.raw_intent}'.")
+            summary = f"No product matching '{constraints.raw_intent}' found in merchant catalog."
+
         return {
             "proposal_id": proposal_id,
             "intent_id": constraints.intent_id,
@@ -403,7 +423,8 @@ def _generate_mock_proposal(constraints: CompiledConstraints, catalog: Dict[str,
                 "category": "none",
             }],
             "total_price_paise": 0,
-            "reasoning_summary": "No product found within budget and merchant constraints.",
+            "reasoning_summary": summary,
+            "is_ambiguous": is_ambiguous,
         }, thought_steps
 
     chosen_inr = best_item["price_paise"] / 100.0
