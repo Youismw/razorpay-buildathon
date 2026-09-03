@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Package,
   Search,
@@ -111,6 +111,240 @@ const SAMPLE_SELLER_CATALOG: CatalogInventoryItem[] = [
     inStock: true,
   },
 ];
+
+// ════════════════════════════════════════════════════════════════
+// Proximity-Aware Delayed Hover Micro-Components (2s in, 1s fade)
+// ════════════════════════════════════════════════════════════════
+
+interface HoverRestockBadgeProps {
+  itemId: string;
+  itemName: string;
+  onRestock: (id: string, qty: number) => void;
+}
+
+const HoverRestockBadge: React.FC<HoverRestockBadgeProps> = ({ itemId, itemName, onRestock }) => {
+  const [visible, setVisible] = useState(false);
+  const enterTimer = useRef<NodeJS.Timeout | null>(null);
+  const leaveTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const handleMouseEnter = () => {
+    if (leaveTimer.current) {
+      clearTimeout(leaveTimer.current);
+      leaveTimer.current = null;
+    }
+    enterTimer.current = setTimeout(() => {
+      setVisible(true);
+    }, 2000); // 2 seconds hover delay
+  };
+
+  const handleMouseLeave = () => {
+    if (enterTimer.current) {
+      clearTimeout(enterTimer.current);
+      enterTimer.current = null;
+    }
+    leaveTimer.current = setTimeout(() => {
+      setVisible(false);
+    }, 1000); // 1 second fade-out delay
+  };
+
+  return (
+    <div
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className="relative inline-block py-1 -my-1 cursor-pointer select-none"
+    >
+      <span className="text-[10px] text-[var(--stage-red)] font-semibold bg-red-50 border border-red-200 px-1.5 py-0.5 rounded block">
+        Stockout
+      </span>
+
+      {/* Floating Restock Option */}
+      <div
+        className={`absolute left-0 bottom-full mb-1.5 z-40 transition-all duration-1000 ease-out pointer-events-auto ${
+          visible ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-1 scale-95 pointer-events-none"
+        }`}
+      >
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRestock(itemId, 50);
+          }}
+          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold shadow-xl whitespace-nowrap flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer border border-emerald-500"
+        >
+          <RefreshCw className="w-3 h-3" />
+          <span>Restock (+50 Units)</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+interface HoverStockEditorProps {
+  stock: number;
+  itemId: string;
+  itemName: string;
+  onUpdateStock: (id: string, newStock: number) => void;
+}
+
+const HoverStockEditor: React.FC<HoverStockEditorProps> = ({ stock, itemId, itemName, onUpdateStock }) => {
+  const [visible, setVisible] = useState(false);
+  const enterTimer = useRef<NodeJS.Timeout | null>(null);
+  const leaveTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const handleMouseEnter = () => {
+    if (leaveTimer.current) {
+      clearTimeout(leaveTimer.current);
+      leaveTimer.current = null;
+    }
+    enterTimer.current = setTimeout(() => {
+      setVisible(true);
+    }, 2000); // 2 seconds hover delay
+  };
+
+  const handleMouseLeave = () => {
+    if (enterTimer.current) {
+      clearTimeout(enterTimer.current);
+      enterTimer.current = null;
+    }
+    leaveTimer.current = setTimeout(() => {
+      setVisible(false);
+    }, 1000); // 1 second fade-out delay
+  };
+
+  const handleClickChange = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const input = prompt(`Enter new inventory stock count for "${itemName}":`, String(stock));
+    if (input !== null && input.trim() !== "") {
+      const parsed = parseInt(input.trim(), 10);
+      if (!isNaN(parsed) && parsed >= 0) {
+        onUpdateStock(itemId, parsed);
+        setVisible(false);
+      }
+    }
+  };
+
+  return (
+    <div
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className="relative inline-block py-1 -my-1 cursor-pointer select-none"
+    >
+      <div className="flex items-center gap-1.5">
+        <span
+          className={`w-2 h-2 rounded-full ${
+            stock > 10
+              ? "bg-[var(--stage-green)]"
+              : stock > 0
+              ? "bg-[var(--gold)]"
+              : "bg-[var(--stage-red)]"
+          }`}
+        />
+        <span className="font-bold tabular-nums text-sm text-[var(--text-primary)] hover:text-[var(--brown)] transition-colors">
+          {stock} units
+        </span>
+      </div>
+
+      {/* Floating Popup: Change stock number */}
+      <div
+        className={`absolute left-0 bottom-full mb-1.5 z-40 transition-all duration-1000 ease-out pointer-events-auto ${
+          visible ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-1 scale-95 pointer-events-none"
+        }`}
+      >
+        <button
+          type="button"
+          onClick={handleClickChange}
+          className="px-2.5 py-1 rounded-lg bg-[var(--brown-dark)] hover:bg-black text-white text-[11px] font-medium shadow-xl whitespace-nowrap flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer border border-[var(--gold)]/40"
+        >
+          <span>Change stock number</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+interface HoverPriceEditorProps {
+  sellingPrice: number;
+  supplierCost: number;
+  itemId: string;
+  itemName: string;
+  onUpdatePrice: (id: string, newPrice: number) => void;
+}
+
+const HoverPriceEditor: React.FC<HoverPriceEditorProps> = ({
+  sellingPrice,
+  supplierCost,
+  itemId,
+  itemName,
+  onUpdatePrice,
+}) => {
+  const [visible, setVisible] = useState(false);
+  const enterTimer = useRef<NodeJS.Timeout | null>(null);
+  const leaveTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const handleMouseEnter = () => {
+    if (leaveTimer.current) {
+      clearTimeout(leaveTimer.current);
+      leaveTimer.current = null;
+    }
+    enterTimer.current = setTimeout(() => {
+      setVisible(true);
+    }, 2000); // 2 seconds hover delay
+  };
+
+  const handleMouseLeave = () => {
+    if (enterTimer.current) {
+      clearTimeout(enterTimer.current);
+      enterTimer.current = null;
+    }
+    leaveTimer.current = setTimeout(() => {
+      setVisible(false);
+    }, 1000); // 1 second fade-out delay
+  };
+
+  const handleClickChange = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const input = prompt(`Enter new selling price (₹) for "${itemName}":`, String(sellingPrice));
+    if (input !== null && input.trim() !== "") {
+      const parsed = parseFloat(input.trim());
+      if (!isNaN(parsed) && parsed > 0) {
+        onUpdatePrice(itemId, parsed);
+        setVisible(false);
+      }
+    }
+  };
+
+  return (
+    <div
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className="relative inline-block py-1 -my-1 cursor-pointer select-none"
+    >
+      <div className="space-y-0.5">
+        <div className="font-bold text-[var(--brown-dark)] text-sm tabular-nums hover:text-[var(--brown)] transition-colors">
+          ₹{sellingPrice.toLocaleString("en-IN")}
+        </div>
+        <div className="text-[10px] font-mono text-[var(--text-faint)]">
+          Supplier: ₹{supplierCost.toLocaleString("en-IN")}
+        </div>
+      </div>
+
+      {/* Floating Popup: Change price */}
+      <div
+        className={`absolute left-0 bottom-full mb-1.5 z-40 transition-all duration-1000 ease-out pointer-events-auto ${
+          visible ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-1 scale-95 pointer-events-none"
+        }`}
+      >
+        <button
+          type="button"
+          onClick={handleClickChange}
+          className="px-2.5 py-1 rounded-lg bg-[var(--brown-dark)] hover:bg-black text-white text-[11px] font-medium shadow-xl whitespace-nowrap flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer border border-[var(--gold)]/40"
+        >
+          <span>Change price</span>
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
   profile,
@@ -332,35 +566,63 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
                       </span>
                     </td>
                     <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`w-2 h-2 rounded-full ${
-                            (item.stock || 0) > 10
-                              ? "bg-[var(--stage-green)]"
-                              : (item.stock || 0) > 0
-                              ? "bg-[var(--gold)]"
-                              : "bg-[var(--stage-red)]"
-                          }`}
+                      <div className="space-y-1">
+                        <HoverStockEditor
+                          stock={item.stock || 0}
+                          itemId={item.id}
+                          itemName={item.name}
+                          onUpdateStock={(id, newStock) => {
+                            setItems((prev) =>
+                              prev.map((it) => (it.id === id ? { ...it, stock: newStock, inStock: newStock > 0 } : it))
+                            );
+                            setAddSuccessMsg(`Stock for "${item.name}" updated to ${newStock} units`);
+                            setTimeout(() => setAddSuccessMsg(null), 3000);
+                            fetch(`${BACKEND_URL}/api/seller/catalog/update`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ product_id: id, stock: newStock }),
+                            }).catch(() => {});
+                          }}
                         />
-                        <span className="font-bold tabular-nums text-sm text-[var(--text-primary)]">
-                          {item.stock || 0} units
-                        </span>
+                        {(item.stock || 0) === 0 && (
+                          <HoverRestockBadge
+                            itemId={item.id}
+                            itemName={item.name}
+                            onRestock={(id, qty) => {
+                              setItems((prev) =>
+                                prev.map((it) => (it.id === id ? { ...it, stock: qty, inStock: true } : it))
+                              );
+                              setAddSuccessMsg(`Successfully restocked "${item.name}" with +${qty} units!`);
+                              setTimeout(() => setAddSuccessMsg(null), 4000);
+                              fetch(`${BACKEND_URL}/api/seller/catalog/update`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ product_id: id, stock: qty }),
+                              }).catch(() => {});
+                            }}
+                          />
+                        )}
                       </div>
-                      {(item.stock || 0) === 0 && (
-                        <span className="text-[10px] text-[var(--stage-red)] font-medium block">
-                          Stockout
-                        </span>
-                      )}
                     </td>
                     <td className="py-3.5 px-4">
-                      <div className="space-y-0.5">
-                        <div className="font-bold text-[var(--brown-dark)] text-sm tabular-nums">
-                          ₹{sp.toLocaleString("en-IN")}
-                        </div>
-                        <div className="text-[10px] font-mono text-[var(--text-faint)]">
-                          Supplier: ₹{sc.toLocaleString("en-IN")}
-                        </div>
-                      </div>
+                      <HoverPriceEditor
+                        sellingPrice={sp}
+                        supplierCost={sc}
+                        itemId={item.id}
+                        itemName={item.name}
+                        onUpdatePrice={(id, newPrice) => {
+                          setItems((prev) =>
+                            prev.map((it) => (it.id === id ? { ...it, sellingPrice: newPrice } : it))
+                          );
+                          setAddSuccessMsg(`Selling price for "${item.name}" updated to ₹${newPrice}`);
+                          setTimeout(() => setAddSuccessMsg(null), 3000);
+                          fetch(`${BACKEND_URL}/api/seller/catalog/update`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ product_id: id, price_inr: newPrice }),
+                          }).catch(() => {});
+                        }}
+                      />
                     </td>
                     <td className="py-3.5 px-4">
                       <span className="px-2 py-0.5 rounded text-xs font-bold font-mono bg-[rgba(34,197,94,0.1)] text-[var(--stage-green)] border border-[rgba(34,197,94,0.2)]">

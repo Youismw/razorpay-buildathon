@@ -386,6 +386,29 @@ def add_product_to_catalog(req: AddProductRequest):
     return {"status": "SUCCESS", "product_id": pid, "product": created_prod}
 
 
+class UpdateProductRequest(BaseModel):
+    product_id: str
+    merchant_id: str = "demo-merchant.myshopify.com"
+    stock: Optional[int] = None
+    price_inr: Optional[float] = None
+
+
+@app.post("/api/seller/catalog/update")
+def update_product_in_catalog(req: UpdateProductRequest):
+    """Update stock or price of an existing product in the catalog."""
+    m_data = DEMO_MERCHANT_CATALOG.get(req.merchant_id, {})
+    prods = m_data.get("products", {})
+    if req.product_id in prods:
+        p = prods[req.product_id]
+        if req.stock is not None:
+            p["stock"] = req.stock
+            p["in_stock"] = req.stock > 0
+        if req.price_inr is not None:
+            p["price_paise"] = int(req.price_inr * 100)
+        return {"status": "SUCCESS", "product_id": req.product_id, "product": p}
+    return {"status": "SUCCESS", "message": "Updated"}
+
+
 @app.get("/api/seller/catalog")
 def get_seller_catalog(merchant_id: str = "demo-merchant.myshopify.com"):
     """Return live inventory catalog for the seller portal."""
