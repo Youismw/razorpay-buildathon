@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useToast } from "@/components/shared/ToastContext";
+import { BACKEND_URL } from "@/lib/api";
 
 interface MandateItem {
   id: string;
@@ -23,7 +24,7 @@ export const MandatesView: React.FC = () => {
   const { showToast } = useToast();
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/api/mandates")
+    fetch(`${BACKEND_URL}/api/mandates`)
       .then((res) => res.json())
       .then((data) => {
         if (data.mandates && data.mandates.length > 0) {
@@ -35,7 +36,7 @@ export const MandatesView: React.FC = () => {
 
   const handleRevoke = async (id: string) => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/mandates/revoke", {
+      const res = await fetch(`${BACKEND_URL}/api/mandates/revoke`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mandate_id: id }),

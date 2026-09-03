@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Radio, Code2, Timer, FileSearch, Shield, Send, Copy, Check, ShieldCheck } from "lucide-react";
 import { useToast } from "@/components/shared/ToastContext";
+import { BACKEND_URL } from "@/lib/api";
 
 type AdvancedTool = "webhooks" | "api-inspector" | "crypto-debugger" | "latency-profiler" | "audit-exporter";
 
@@ -48,7 +49,7 @@ export const AdvancedToolsView: React.FC = () => {
   const handleDispatch = async () => {
     try {
       const parsedPayload = JSON.parse(payloadText);
-      const res = await fetch("http://127.0.0.1:8000/api/webhooks/razorpay", {
+      const res = await fetch(`${BACKEND_URL}/api/webhooks/razorpay`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -174,7 +175,7 @@ export const AdvancedToolsView: React.FC = () => {
               <div className="p-4 rounded-lg bg-[var(--bg-subtle)] font-mono text-xs text-[var(--text-secondary)] space-y-2">
                 <div><strong className="text-[var(--brown)]">POST</strong> /buy/stream HTTP/1.1</div>
                 <div>Content-Type: application/json</div>
-                <div>Host: 127.0.0.1:8000</div>
+                <div>Host: {BACKEND_URL.replace(/^https?:\/\//, "")}</div>
                 <div className="pt-2 border-t border-[rgba(92,61,46,0.08)]">
                   {`{"raw_intent": "Buy headphones under Rs 5000", "max_spend_inr": 5000, "llm_provider": "mock"}`}
                 </div>

@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { SellerProfile, SettlementPreferences } from "@/lib/sellerStore";
+import { BACKEND_URL } from "@/lib/api";
 
 interface SellerSettlementViewProps {
   profile: SellerProfile;
@@ -31,7 +32,7 @@ export const SellerSettlementView: React.FC<SellerSettlementViewProps> = ({
 
   const handleApplyPreset = async (industry: string, label: string) => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/seller/settlement/presets/${industry}`);
+      const res = await fetch(`${BACKEND_URL}/api/seller/settlement/presets/${industry}`);
       const presetData = await res.json();
       const normalized: SettlementPreferences = {
         payoutSchedule: presetData.payoutSchedule || presetData.payout_schedule || "daily_t1",

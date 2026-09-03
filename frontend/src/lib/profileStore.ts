@@ -1,5 +1,7 @@
 "use client";
 
+import { BACKEND_URL } from "./api";
+
 export interface GroceryStapleItem {
   id: string;
   name: string;
@@ -55,7 +57,7 @@ export function saveUserProfile(profile: UserProfileState): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
-    fetch("http://127.0.0.1:8000/api/buyer/profile", {
+    fetch(`${BACKEND_URL}/api/buyer/profile`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

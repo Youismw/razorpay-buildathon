@@ -1,6 +1,6 @@
 import { BuyRequest, BuyResponse, Invariant, MerchantCatalog, TransactionAuditRecord } from "./types";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+export const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 
 export async function checkBackendHealth(): Promise<{ status: string; online: boolean }> {
   try {

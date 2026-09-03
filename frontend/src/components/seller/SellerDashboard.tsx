@@ -11,6 +11,7 @@ import {
   saveSellerProfile,
   DEFAULT_SELLER_PROFILE,
 } from "@/lib/sellerStore";
+import { BACKEND_URL } from "@/lib/api";
 import { SellerNavbar, SellerTab } from "./SellerNavbar";
 import { SellerChatAssistant } from "./SellerChatAssistant";
 import { SellerCatalogView } from "./SellerCatalogView";
@@ -34,7 +35,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({ onBack }) => {
     const loaded = loadSellerProfile();
     setProfile(loaded);
     // Also fetch from backend if available
-    fetch("http://127.0.0.1:8000/api/seller/profile")
+    fetch(`${BACKEND_URL}/api/seller/profile`)
       .then((res) => res.json())
       .then((backendProfile) => {
         if (backendProfile?.merchant_id) {
@@ -84,7 +85,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({ onBack }) => {
   const handleUpdateProfile = (newProfile: SellerProfile) => {
     setProfile(newProfile);
     saveSellerProfile(newProfile);
-    fetch("http://127.0.0.1:8000/api/seller/profile", {
+    fetch(`${BACKEND_URL}/api/seller/profile`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

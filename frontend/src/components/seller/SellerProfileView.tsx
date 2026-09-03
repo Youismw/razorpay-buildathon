@@ -15,6 +15,7 @@ import {
   Sliders,
 } from "lucide-react";
 import { SellerProfile, RoutineRestockItem } from "@/lib/sellerStore";
+import { BACKEND_URL } from "@/lib/api";
 
 interface SellerProfileViewProps {
   profile: SellerProfile;
@@ -59,7 +60,7 @@ export const SellerProfileView: React.FC<SellerProfileViewProps> = ({
 
     // Also syndicate to backend catalog automatically so buyers and AI can immediately find it
     const calculatedPrice = Math.round(newRestockCost * (1 + newRestockMargin / 100));
-    fetch("http://127.0.0.1:8000/api/seller/catalog/add", {
+    fetch(`${BACKEND_URL}/api/seller/catalog/add`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

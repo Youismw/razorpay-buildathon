@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { SellerProfile, RoutineRestockItem } from "@/lib/sellerStore";
+import { BACKEND_URL } from "@/lib/api";
 
 interface SellerCatalogViewProps {
   profile: SellerProfile;
@@ -157,7 +158,7 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
     if (!newProductName.trim()) return;
     setIsSubmitting(true);
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/seller/catalog/add", {
+      const res = await fetch(`${BACKEND_URL}/api/seller/catalog/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -204,7 +205,7 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
   };
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/api/seller/catalog")
+    fetch(`${BACKEND_URL}/api/seller/catalog`)
       .then((res) => res.json())
       .then((data) => {
         if (data.items && data.items.length > 0) {

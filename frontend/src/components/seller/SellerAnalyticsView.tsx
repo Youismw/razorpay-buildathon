@@ -19,6 +19,7 @@ import {
   AIStrategyRecommendation,
   SellerProfile,
 } from "@/lib/sellerStore";
+import { BACKEND_URL } from "@/lib/api";
 import { StrategyExecutionModal } from "./StrategyExecutionModal";
 
 interface SellerAnalyticsViewProps {
@@ -37,7 +38,7 @@ export const SellerAnalyticsView: React.FC<SellerAnalyticsViewProps> = ({
 
   useEffect(() => {
     setLoading(true);
-    fetch(`http://127.0.0.1:8000/api/seller/analytics?timeframe=${timeframe}`)
+    fetch(`${BACKEND_URL}/api/seller/analytics?timeframe=${timeframe}`)
       .then((res) => res.json())
       .then((data) => setAnalytics(data))
       .catch(() => {})
@@ -241,7 +242,7 @@ export const SellerAnalyticsView: React.FC<SellerAnalyticsViewProps> = ({
           profile={profile}
           onClose={() => setActiveRecommendation(null)}
           onExecutionComplete={() => {
-            fetch(`http://127.0.0.1:8000/api/seller/analytics?timeframe=${timeframe}`)
+            fetch(`${BACKEND_URL}/api/seller/analytics?timeframe=${timeframe}`)
               .then((res) => res.json())
               .then((data) => setAnalytics(data))
               .catch(() => {});

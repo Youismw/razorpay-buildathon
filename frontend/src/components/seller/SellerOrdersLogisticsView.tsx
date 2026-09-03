@@ -16,6 +16,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { SellerOrder, LogisticsDispatch } from "@/lib/sellerStore";
+import { BACKEND_URL } from "@/lib/api";
 
 interface SellerOrdersLogisticsViewProps {
   orders?: SellerOrder[];
@@ -29,7 +30,7 @@ export const SellerOrdersLogisticsView: React.FC<SellerOrdersLogisticsViewProps>
   const [copiedHash, setCopiedHash] = useState(false);
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/api/seller/orders")
+    fetch(`${BACKEND_URL}/api/seller/orders`)
       .then((res) => res.json())
       .then((data) => setOrders(data.orders || []))
       .catch(() => {});
@@ -38,7 +39,7 @@ export const SellerOrdersLogisticsView: React.FC<SellerOrdersLogisticsViewProps>
   const handleAutoDispatch = async (orderId: string) => {
     setIsDispatching(orderId);
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/seller/logistics/dispatch", {
+      const res = await fetch(`${BACKEND_URL}/api/seller/logistics/dispatch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

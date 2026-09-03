@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { SellerProfile, CompetitorScanResult } from "@/lib/sellerStore";
+import { BACKEND_URL } from "@/lib/api";
 
 interface SellerChatAssistantProps {
   profile: SellerProfile;
@@ -90,7 +91,7 @@ export const SellerChatAssistant: React.FC<SellerChatAssistantProps> = ({
     setIsThinking(true);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/seller/chat", {
+      const res = await fetch(`${BACKEND_URL}/api/seller/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -185,7 +186,7 @@ export const SellerChatAssistant: React.FC<SellerChatAssistantProps> = ({
         {
           id: `ai-${Date.now()}`,
           sender: "ai",
-          text: `I encountered an issue contacting the merchant agent backend: ${err?.message || "Connection refused"}. Please ensure the orchestrator backend is running on port 8000.`,
+          text: `I encountered an issue contacting the merchant agent backend: ${err?.message || "Connection refused"}. Please ensure the orchestrator backend is online and reachable.`,
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
