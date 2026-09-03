@@ -141,39 +141,42 @@ export const SearchView: React.FC<SearchViewProps> = ({
         if (!res.ok) return;
         const data = await res.json();
         if (data.items && Array.isArray(data.items) && isMounted) {
-          const dynamicStaples: DetectedStaple[] = data.items.map((it: any) => {
+          const dynamicStaples: DetectedStaple[] = [];
+          for (const it of data.items) {
             const nameLower = (it.name || it.title || "").toLowerCase();
-            let kw = (it.id || "").toLowerCase().replace("prod-", "");
-            if (nameLower.includes("milk")) kw = "milk";
-            else if (nameLower.includes("coffee")) kw = "coffee";
-            else if (nameLower.includes("bread")) kw = "bread";
-            else if (nameLower.includes("butter")) kw = "butter";
-            else if (nameLower.includes("egg")) kw = "egg";
-            else if (nameLower.includes("atta") || nameLower.includes("flour")) kw = "atta";
-            else if (nameLower.includes("headphone") || nameLower.includes("earphone")) kw = "headphone";
-            else if (nameLower.includes("earbud")) kw = "earbud";
-            else if (nameLower.includes("watch")) kw = "watch";
+            let kw = "";
+            if (nameLower.includes("milk") || nameLower.includes("doodh")) kw = "milk";
+            else if (nameLower.includes("coffee") || nameLower.includes("nescafe") || nameLower.includes("espresso")) kw = "coffee";
+            else if (nameLower.includes("bread") || nameLower.includes("loaf") || nameLower.includes("pav")) kw = "bread";
+            else if (nameLower.includes("butter") || nameLower.includes("makhan")) kw = "butter";
+            else if (nameLower.includes("egg") || nameLower.includes("anda")) kw = "egg";
+            else if (nameLower.includes("atta") || nameLower.includes("flour") || nameLower.includes("gehu")) kw = "atta";
+            else if (nameLower.includes("headphone") || nameLower.includes("earphone") || nameLower.includes("headset")) kw = "headphone";
+            else if (nameLower.includes("earbud") || nameLower.includes("airpod")) kw = "earbud";
+            else if (nameLower.includes("speaker")) kw = "speaker";
             else if (nameLower.includes("mouse")) kw = "mouse";
             else if (nameLower.includes("keyboard")) kw = "keyboard";
-            else if (nameLower.includes("speaker")) kw = "speaker";
-            else kw = nameLower.split(" ")[0] || kw;
+            else if (nameLower.includes("smartwatch") || (nameLower.includes("watch") && !nameLower.includes("smart"))) kw = "watch";
+            else if (nameLower.includes("air purifier") || nameLower.includes("purifier")) kw = "purifier";
+
+            if (!kw) continue;
 
             let unitLabel = "Unit";
-            if (nameLower.includes("(1l)") || nameLower.includes("liter") || nameLower.includes("1l")) unitLabel = "L";
-            else if (nameLower.includes("400g") || nameLower.includes("bread")) unitLabel = "Loaf";
-            else if (nameLower.includes("jar") || nameLower.includes("coffee")) unitLabel = "Jar";
-            else if (nameLower.includes("pack") || nameLower.includes("butter") || nameLower.includes("egg")) unitLabel = "Pack";
-            else if (nameLower.includes("5kg") || nameLower.includes("atta")) unitLabel = "Bag";
+            if (nameLower.includes("(1l)") || nameLower.includes("liter") || nameLower.includes("1l") || kw === "milk") unitLabel = "L";
+            else if (nameLower.includes("400g") || kw === "bread") unitLabel = "Loaf";
+            else if (nameLower.includes("jar") || kw === "coffee") unitLabel = "Jar";
+            else if (nameLower.includes("pack") || kw === "butter" || kw === "egg") unitLabel = "Pack";
+            else if (nameLower.includes("5kg") || kw === "atta") unitLabel = "Bag";
 
-            return {
+            dynamicStaples.push({
               keyword: kw,
               name: it.name || it.title,
               unitRateInr: Number(it.sellingPrice || it.sellingPriceInr || 100),
               unitLabel,
               defaultQty: 1,
               quickQtys: unitLabel === "L" ? [1, 2, 3, 5] : [1, 2, 3],
-            };
-          });
+            });
+          }
 
           const merged = [...dynamicStaples];
           for (const cs of COMMON_STAPLES) {
@@ -300,7 +303,11 @@ export const SearchView: React.FC<SearchViewProps> = ({
     /\b\d+\s*(?:l|liter|liters|litre|litres|kg|kgs|packet|packets|pack|packs|bottle|bottles|pcs|units?|items?)?\b/.test(lowerQuery) ||
     /\b(one|two|three|four|five|six)\b/.test(lowerQuery);
 
-  const detectedStaple = liveStaples.find((s) => lowerQuery.includes(s.keyword));
+  const detectedStaple = liveStaples.find((s) => {
+    if (!s.keyword || s.keyword.length < 3) return false;
+    const regex = new RegExp(`\\b${s.keyword}(?:s|es)?\\b`, "i");
+    return regex.test(lowerQuery);
+  });
   const showQuantityClarifier = Boolean(detectedStaple && !hasExplicitQuantity && profile?.alwaysConfirmQuantity !== false);
 
   const handleSubmit = (e: React.FormEvent) => {

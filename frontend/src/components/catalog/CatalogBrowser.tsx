@@ -131,23 +131,26 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ catalogs, onBuyItem })
                 </p>
               </div>
 
-              <div className="flex items-center justify-between pt-3 border-t border-[rgba(92,61,46,0.06)]">
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-[rgba(92,61,46,0.08)] flex-wrap sm:flex-nowrap">
                 <div>
-                  <span className="text-[10px] text-[var(--text-faint)] block">Price</span>
+                  <span className="text-[10px] uppercase font-mono tracking-wider text-[var(--text-faint)] block">
+                    Verified Offer
+                  </span>
                   <span className="text-base font-bold text-[var(--brown-dark)] tabular-nums">
                     ₹{priceInr.toLocaleString("en-IN", { minimumFractionDigits: 0 })}
                   </span>
                 </div>
                 <button
                   onClick={() => handleProductClick(product)}
-                  className={`text-xs py-1.5 px-3 rounded-lg font-medium inline-flex items-center gap-1.5 transition-colors ${
+                  className={`text-xs py-2 px-3.5 rounded-xl font-semibold inline-flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0 ${
                     product.in_stock
-                      ? "btn-secondary"
-                      : "bg-[rgba(239,68,68,0.1)] text-[var(--stage-red)] border border-[rgba(239,68,68,0.25)] hover:bg-[rgba(239,68,68,0.18)]"
+                      ? "bg-[var(--brown)] hover:bg-[var(--brown-dark)] text-white shadow-sm hover:shadow-md border border-[var(--gold)]/30"
+                      : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
                   }`}
                 >
+                  {product.in_stock && <Sparkles className="w-3.5 h-3.5 text-[var(--gold-light)]" />}
                   <span>{product.in_stock ? "Buy with AI" : "Out of Stock"}</span>
-                  <ArrowRight className="w-3 h-3" />
+                  <ArrowRight className="w-3.5 h-3.5 text-white/80" />
                 </button>
               </div>
             </div>
