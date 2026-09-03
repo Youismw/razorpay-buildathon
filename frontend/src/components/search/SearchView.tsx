@@ -845,7 +845,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                   {/* If Settlement Complete, Show prominent Razorpay Payment Button */}
                   {(settlementStage?.status === "success" || (settlementStage as any)?.status === "passed") && (() => {
                     const stageData = settlementStage?.data || {};
-                    const rzpOrderId = typeof stageData.razorpay_order_id === "string" ? stageData.razorpay_order_id : `order_test_${Date.now()}`;
+                    const rzpOrderId = typeof stageData.razorpay_order_id === "string" ? stageData.razorpay_order_id : "order_test_demo";
                     const amountPaise = Number(
                       stageData.total_price_paise ||
                       Number(stageData.total_inr || maxSpendInr) * 100
