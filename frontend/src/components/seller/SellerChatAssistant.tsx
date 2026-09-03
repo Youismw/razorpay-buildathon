@@ -16,6 +16,8 @@ import {
   ExternalLink,
   Search,
   X,
+  Mic,
+  MicOff,
 } from "lucide-react";
 import { SellerProfile, CompetitorScanResult } from "@/lib/sellerStore";
 import { BACKEND_URL } from "@/lib/api";
@@ -70,6 +72,62 @@ export const SellerChatAssistant: React.FC<SellerChatAssistantProps> = ({
   const [selectedProductToScan, setSelectedProductToScan] = useState("Sony WH-CH520 Wireless Headphones");
   const [customScanInput, setCustomScanInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Voice Command State
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  const handleToggleVoice = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("Voice input is not supported in this browser. Please use Chrome, Edge, or Safari.");
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-IN";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript) {
+          setInput(transcript);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn("Speech recognition error:", event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error("Failed to start voice recognition:", err);
+      setIsListening(false);
+    }
+  };
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -395,6 +453,14 @@ export const SellerChatAssistant: React.FC<SellerChatAssistantProps> = ({
         <div ref={scrollRef} />
       </div>
 
+      {/* Listening Voice Indicator */}
+      {isListening && (
+        <div className="flex items-center justify-center gap-2 text-xs font-mono text-red-600 bg-red-50 py-1.5 px-3 rounded-xl border border-red-200 animate-pulse shrink-0">
+          <span className="w-2 h-2 rounded-full bg-red-600" />
+          <span>Listening to merchant command... (e.g. &ldquo;Scan competitor prices for Sony headphones&rdquo;)</span>
+        </div>
+      )}
+
       {/* Input Bar */}
       <form
         onSubmit={(e) => {
@@ -409,15 +475,27 @@ export const SellerChatAssistant: React.FC<SellerChatAssistantProps> = ({
           onChange={(e) => setInput(e.target.value)}
           placeholder={
             sellerMode === "basic"
-              ? "Describe product or type 'Scan competitor prices'..."
+              ? "Describe product or use mic to speak command..."
               : "Set listing price, margin %, marketplace syndication, or dynamic discount rules..."
           }
           className="flex-1 bg-transparent px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] outline-none"
         />
         <button
+          type="button"
+          onClick={handleToggleVoice}
+          title={isListening ? "Listening... Click to stop" : "Speak Voice Command"}
+          className={`p-2.5 rounded-xl transition-all cursor-pointer shrink-0 ${
+            isListening
+              ? "bg-red-500 text-white animate-pulse shadow-md"
+              : "text-[var(--text-muted)] hover:text-[var(--brown)] hover:bg-[var(--brown-faint)]"
+          }`}
+        >
+          {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+        </button>
+        <button
           type="submit"
           disabled={!input.trim() || isThinking}
-          className="btn-primary p-2.5 rounded-xl text-xs font-semibold shadow-xs disabled:opacity-50"
+          className="btn-primary p-2.5 rounded-xl text-xs font-semibold shadow-xs disabled:opacity-50 cursor-pointer"
         >
           <Send className="w-4 h-4" />
         </button>

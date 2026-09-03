@@ -14,6 +14,8 @@ import {
   Sparkles,
   CheckCircle2,
   X,
+  Mic,
+  MicOff,
 } from "lucide-react";
 import { SellerProfile, RoutineRestockItem } from "@/lib/sellerStore";
 import { BACKEND_URL } from "@/lib/api";
@@ -355,6 +357,62 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
 
+  // Voice Search State
+  const [isCatalogListening, setIsCatalogListening] = useState(false);
+  const catalogRecognitionRef = useRef<any>(null);
+
+  const handleCatalogVoiceSearch = () => {
+    if (isCatalogListening) {
+      catalogRecognitionRef.current?.stop();
+      setIsCatalogListening(false);
+      return;
+    }
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("Voice search is not supported in this browser. Please use Chrome, Edge, or Safari.");
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-IN";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setIsCatalogListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript) {
+          setSearch(transcript);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn("Speech recognition error:", event.error);
+        setIsCatalogListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsCatalogListening(false);
+      };
+
+      catalogRecognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error("Failed to start voice recognition:", err);
+      setIsCatalogListening(false);
+    }
+  };
+
   // Add Product Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newProductName, setNewProductName] = useState("");
@@ -505,15 +563,27 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
 
       {/* Filters & Search */}
       <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
-        <div className="relative flex-1 w-full sm:max-w-md">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
+        <div className="relative flex-1 w-full sm:max-w-md flex items-center">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)] pointer-events-none" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search inventory..."
-            className="input pl-10 text-sm py-2"
+            placeholder="Search inventory or use voice..."
+            className="input pl-10 pr-10 text-sm py-2 w-full"
           />
+          <button
+            type="button"
+            onClick={handleCatalogVoiceSearch}
+            title={isCatalogListening ? "Listening... Click to stop" : "Voice search inventory"}
+            className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-colors cursor-pointer ${
+              isCatalogListening
+                ? "bg-red-500 text-white animate-pulse"
+                : "text-[var(--text-muted)] hover:text-[var(--brown)] hover:bg-[var(--brown-faint)]"
+            }`}
+          >
+            {isCatalogListening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+          </button>
         </div>
         <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
           {categories.map((cat) => (
