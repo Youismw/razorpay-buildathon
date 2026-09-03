@@ -1,0 +1,589 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import {
+  Package,
+  Search,
+  Tag,
+  TrendingUp,
+  AlertTriangle,
+  RefreshCw,
+  Plus,
+  ExternalLink,
+  Clock,
+  Sparkles,
+  CheckCircle2,
+  X,
+} from "lucide-react";
+import { SellerProfile, RoutineRestockItem } from "@/lib/sellerStore";
+
+interface SellerCatalogViewProps {
+  profile: SellerProfile;
+  sellerMode: "basic" | "advanced";
+  onTriggerScan?: (productName: string) => void;
+}
+
+interface CatalogInventoryItem {
+  id: string;
+  name: string;
+  category: string;
+  stock: number;
+  supplierCost: number;
+  sellingPrice: number;
+  marketplaces: string[];
+  daysIdle: number;
+  discountPct: number;
+  inStock: boolean;
+}
+
+const SAMPLE_SELLER_CATALOG: CatalogInventoryItem[] = [
+  {
+    id: "PROD-WH-CH520",
+    name: "Sony WH-CH520 Wireless Headphones",
+    category: "electronics",
+    stock: 42,
+    supplierCost: 3600,
+    sellingPrice: 4999,
+    marketplaces: ["Amazon", "Flipkart", "AP2 Gateway"],
+    daysIdle: 3,
+    discountPct: 0,
+    inStock: true,
+  },
+  {
+    id: "PROD-BUDS-XM5",
+    name: "Sony WF-1000XM5 Noise Canceling Earbuds",
+    category: "electronics",
+    stock: 18,
+    supplierCost: 15200,
+    sellingPrice: 19999,
+    marketplaces: ["Amazon", "AP2 Gateway"],
+    daysIdle: 5,
+    discountPct: 0,
+    inStock: true,
+  },
+  {
+    id: "PROD-MILK-AMUL",
+    name: "Amul Taaza Homogenised Toned Milk (1L)",
+    category: "groceries",
+    stock: 120,
+    supplierCost: 58,
+    sellingPrice: 72,
+    marketplaces: ["AP2 Gateway", "ONDC Direct"],
+    daysIdle: 1,
+    discountPct: 0,
+    inStock: true,
+  },
+  {
+    id: "PROD-MILK-NANDINI",
+    name: "Nandini Special Pasteurized Milk (1L)",
+    category: "groceries",
+    stock: 0,
+    supplierCost: 44,
+    sellingPrice: 56,
+    marketplaces: ["AP2 Gateway", "ONDC Direct"],
+    daysIdle: 12,
+    discountPct: 0,
+    inStock: false,
+  },
+  {
+    id: "PROD-COFFEE-TOKAI",
+    name: "Blue Tokai Attikan Dark Roast (250g)",
+    category: "groceries",
+    stock: 28,
+    supplierCost: 330,
+    sellingPrice: 470,
+    marketplaces: ["Amazon", "AP2 Gateway"],
+    daysIdle: 4,
+    discountPct: 0,
+    inStock: true,
+  },
+  {
+    id: "PROD-SUN-AVIO",
+    name: "Ray-Ban Aviator Gradient Sunglasses",
+    category: "fashion",
+    stock: 7,
+    supplierCost: 8500,
+    sellingPrice: 10199, // 15% clearance applied
+    marketplaces: ["Flipkart", "AP2 Gateway"],
+    daysIdle: 18,
+    discountPct: 15,
+    inStock: true,
+  },
+];
+
+export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
+  profile,
+  sellerMode,
+  onTriggerScan,
+}) => {
+  const [items, setItems] = useState<CatalogInventoryItem[]>(SAMPLE_SELLER_CATALOG);
+  const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+
+  // Add Product Modal State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newProductName, setNewProductName] = useState("");
+  const [newProductCategory, setNewProductCategory] = useState("groceries");
+  const [newProductCost, setNewProductCost] = useState<number>(280);
+  const [newProductPrice, setNewProductPrice] = useState<number>(350);
+  const [newProductStock, setNewProductStock] = useState<number>(30);
+  const [newProductMargin, setNewProductMargin] = useState<number>(20);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [addSuccessMsg, setAddSuccessMsg] = useState<string | null>(null);
+
+  // Synchronize price when cost or margin changes
+  const handleCostChange = (cost: number) => {
+    setNewProductCost(cost);
+    const calculatedPrice = Math.round(cost * (1 + newProductMargin / 100));
+    setNewProductPrice(calculatedPrice);
+  };
+
+  const handleMarginChange = (margin: number) => {
+    setNewProductMargin(margin);
+    const calculatedPrice = Math.round(newProductCost * (1 + margin / 100));
+    setNewProductPrice(calculatedPrice);
+  };
+
+  const handlePriceChange = (price: number) => {
+    setNewProductPrice(price);
+    if (price > newProductCost && newProductCost > 0) {
+      const calculatedMargin = Math.round(((price - newProductCost) / price) * 100);
+      setNewProductMargin(calculatedMargin);
+    }
+  };
+
+  const handleAddProductSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProductName.trim()) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/seller/catalog/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newProductName.trim(),
+          price_inr: Number(newProductPrice),
+          category: newProductCategory,
+          stock: Number(newProductStock),
+          supplier_cost_inr: Number(newProductCost),
+          merchant_id: "demo-merchant.myshopify.com",
+        }),
+      });
+
+      const data = await res.json();
+      if (data.status === "SUCCESS") {
+        const newItem: CatalogInventoryItem = {
+          id: data.product_id,
+          name: newProductName.trim(),
+          category: newProductCategory,
+          stock: Number(newProductStock),
+          supplierCost: Number(newProductCost),
+          sellingPrice: Number(newProductPrice),
+          marketplaces: ["AP2 Gateway", "Amazon", "Flipkart"],
+          daysIdle: 0,
+          discountPct: 0,
+          inStock: Number(newProductStock) > 0,
+        };
+        setItems((prev) => [newItem, ...prev]);
+        setAddSuccessMsg(
+          `Successfully listed "${newProductName.trim()}" in AP2 Catalog at ₹${newProductPrice} (+${newProductMargin}% margin)!`
+        );
+        setIsAddModalOpen(false);
+        setNewProductName("");
+        setNewProductCost(280);
+        setNewProductPrice(350);
+        setNewProductStock(30);
+        setNewProductMargin(20);
+        setTimeout(() => setAddSuccessMsg(null), 4000);
+      }
+    } catch (err) {
+      console.error("Failed to add product to catalog:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    fetch("http://127.0.0.1:8000/api/seller/catalog")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.items && data.items.length > 0) {
+          setItems(
+            data.items.map((it: any) => ({
+              id: it.id,
+              name: it.title,
+              category: it.category || "general",
+              stock: it.inventoryStock ?? 0,
+              supplierCost: it.supplierCostInr ?? 0,
+              sellingPrice: it.sellingPriceInr ?? 0,
+              marketplaces: it.channels || ["AP2 Gateway", "Amazon", "Flipkart"],
+              daysIdle: it.daysInInventory || 4,
+              discountPct: it.autoClearanceDiscountPct || 0,
+              inStock: (it.inventoryStock ?? 0) > 0,
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const filtered = items.filter((item) => {
+    const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
+    const matchesCategory = selectedCategory === "All" || item.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const categories = ["All", "electronics", "groceries", "fashion", "home", "beauty", "books"];
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="display-heading text-2xl mb-1">Merchant Catalog & Inventory</h2>
+          <p className="text-sm text-[var(--text-muted)]">
+            Multi-marketplace syndication across Amazon, Flipkart, ONDC, and AP2 Agentic Gateway.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="px-3 py-1.5 rounded-lg bg-[var(--gold-faint)] border border-[var(--gold)] text-xs font-mono text-[var(--brown)] flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Auto-Clearance Active (14d/30d)</span>
+          </div>
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="btn-primary py-2 px-4 rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Product</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Success Notification */}
+      {addSuccessMsg && (
+        <div className="p-3.5 rounded-xl bg-[rgba(34,197,94,0.1)] border border-[rgba(34,197,94,0.25)] text-xs font-semibold text-[var(--stage-green)] flex items-center gap-2 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{addSuccessMsg}</span>
+        </div>
+      )}
+
+      {/* Filters & Search */}
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="relative flex-1 w-full sm:max-w-md">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search inventory..."
+            className="input pl-10 text-sm py-2"
+          />
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                selectedCategory === cat
+                  ? "bg-[var(--brown)] text-white"
+                  : "bg-white border border-[rgba(92,61,46,0.1)] text-[var(--text-muted)] hover:bg-[var(--brown-faint)]"
+              }`}
+            >
+              {cat === "All" ? "All Categories" : cat.charAt(0).toUpperCase() + cat.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Inventory Table */}
+      <div className="card overflow-hidden shadow-xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-[var(--brown-faint)]/40 border-b border-[rgba(92,61,46,0.08)] text-[var(--text-faint)] font-mono uppercase text-[10px] tracking-wider">
+                <th className="py-3 px-4">Product / SKU</th>
+                <th className="py-3 px-4">Category</th>
+                <th className="py-3 px-4">Stock Level</th>
+                <th className="py-3 px-4">Cost vs Selling Price</th>
+                <th className="py-3 px-4">Gross Margin</th>
+                <th className="py-3 px-4">Syndicated Channels</th>
+                <th className="py-3 px-4">Clearance Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[rgba(92,61,46,0.06)]">
+              {filtered.map((item) => {
+                const sp = item.sellingPrice || 0;
+                const sc = item.supplierCost || 0;
+                const marginInr = sp - sc;
+                const marginPct = sp > 0 ? ((marginInr / sp) * 100).toFixed(1) : "25.0";
+
+                return (
+                  <tr key={item.id} className="hover:bg-[var(--brown-faint)]/20 transition-colors">
+                    <td className="py-3.5 px-4 font-medium text-[var(--text-primary)]">
+                      <div className="font-semibold text-sm">{item.name}</div>
+                      <span className="text-[10px] font-mono text-[var(--text-faint)]">{item.id}</span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-[var(--brown-faint)] text-[var(--brown)]">
+                        {item.category}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`w-2 h-2 rounded-full ${
+                            (item.stock || 0) > 10
+                              ? "bg-[var(--stage-green)]"
+                              : (item.stock || 0) > 0
+                              ? "bg-[var(--gold)]"
+                              : "bg-[var(--stage-red)]"
+                          }`}
+                        />
+                        <span className="font-bold tabular-nums text-sm text-[var(--text-primary)]">
+                          {item.stock || 0} units
+                        </span>
+                      </div>
+                      {(item.stock || 0) === 0 && (
+                        <span className="text-[10px] text-[var(--stage-red)] font-medium block">
+                          Stockout
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="space-y-0.5">
+                        <div className="font-bold text-[var(--brown-dark)] text-sm tabular-nums">
+                          ₹{sp.toLocaleString("en-IN")}
+                        </div>
+                        <div className="text-[10px] font-mono text-[var(--text-faint)]">
+                          Supplier: ₹{sc.toLocaleString("en-IN")}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className="px-2 py-0.5 rounded text-xs font-bold font-mono bg-[rgba(34,197,94,0.1)] text-[var(--stage-green)] border border-[rgba(34,197,94,0.2)]">
+                        +{marginPct}%
+                      </span>
+                      <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">
+                        +₹{marginInr.toLocaleString("en-IN")} net
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="flex flex-wrap gap-1">
+                        {item.marketplaces.map((mp) => (
+                          <span
+                            key={mp}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white border border-[rgba(92,61,46,0.12)] text-[var(--brown-dark)]"
+                          >
+                            {mp}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      {item.discountPct > 0 ? (
+                        <div className="space-y-0.5">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[rgba(239,68,68,0.1)] text-[var(--stage-red)] border border-[rgba(239,68,68,0.2)]">
+                            {item.discountPct}% Markdown Applied
+                          </span>
+                          <span className="text-[10px] font-mono text-[var(--text-faint)] block">
+                            {item.daysIdle}d idle
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-[var(--text-muted)] text-[11px]">
+                          <Clock className="w-3 h-3 text-[var(--text-faint)]" />
+                          <span>{item.daysIdle}d on shelf</span>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Add Product Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
+          <div className="card w-full max-w-lg bg-white border border-[rgba(92,61,46,0.18)] rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-[rgba(92,61,46,0.08)] flex items-center justify-between bg-[var(--white-warm)]/60">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-[var(--gold-faint)] flex items-center justify-center">
+                  <Package className="w-4 h-4 text-[var(--brown)]" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[var(--brown-dark)]">
+                    Add Product to Inventory
+                  </h3>
+                  <p className="text-[11px] text-[var(--text-muted)]">
+                    Direct entry into AP2 Universal Commerce Catalog
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAddModalOpen(false)}
+                className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--brown-faint)]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleAddProductSubmit} className="p-5 space-y-4">
+              {/* Product Name */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-[var(--text-primary)]">
+                  Product Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g., Artisan Blue Cheese (200g) or Sony XM5..."
+                  value={newProductName}
+                  onChange={(e) => setNewProductName(e.target.value)}
+                  className="input text-xs w-full py-2 bg-white text-[var(--text-primary)] border border-[rgba(92,61,46,0.18)] rounded-xl"
+                />
+              </div>
+
+              {/* Category & Stock */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-[var(--text-primary)]">
+                    Category
+                  </label>
+                  <select
+                    value={newProductCategory}
+                    onChange={(e) => setNewProductCategory(e.target.value)}
+                    className="input text-xs w-full py-2 bg-white text-[var(--text-primary)] border border-[rgba(92,61,46,0.18)] rounded-xl"
+                  >
+                    <option value="groceries">Groceries & Gourmet</option>
+                    <option value="electronics">Electronics & Audio</option>
+                    <option value="fashion">Fashion & Apparel</option>
+                    <option value="home">Home & Kitchen</option>
+                    <option value="beauty">Beauty & Personal Care</option>
+                    <option value="books">Books & Stationery</option>
+                    <option value="general">General Merchandise</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-[var(--text-primary)]">
+                    Initial Stock (Units)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={newProductStock}
+                    onChange={(e) => setNewProductStock(Number(e.target.value))}
+                    className="input text-xs w-full py-2 bg-white text-[var(--text-primary)] border border-[rgba(92,61,46,0.18)] rounded-xl"
+                  />
+                </div>
+              </div>
+
+              {/* Pricing & Margin Synchronizer */}
+              <div className="p-3.5 rounded-xl bg-[var(--brown-faint)]/40 border border-[rgba(92,61,46,0.1)] space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[var(--brown-dark)]">
+                    Pricing & Profit Margin Calculator
+                  </span>
+                  <span className="text-[10px] font-mono text-[var(--stage-green)] font-bold">
+                    +{newProductMargin}% Margin
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-[var(--text-muted)] font-medium">
+                      Wholesale Cost (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={newProductCost}
+                      onChange={(e) => handleCostChange(Number(e.target.value))}
+                      className="input text-xs w-full py-2 bg-white text-[var(--text-primary)] border border-[rgba(92,61,46,0.18)] rounded-xl font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-[var(--text-muted)] font-medium">
+                      Selling Price (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={newProductPrice}
+                      onChange={(e) => handlePriceChange(Number(e.target.value))}
+                      className="input text-xs w-full py-2 bg-white text-[var(--text-primary)] border border-[rgba(92,61,46,0.18)] rounded-xl font-mono font-bold text-[var(--brown-dark)]"
+                    />
+                  </div>
+                </div>
+
+                {/* Margin Slider */}
+                <div className="space-y-1 pt-1">
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-[var(--text-muted)]">Target Profit Margin</span>
+                    <span className="font-mono font-bold text-[var(--brown-dark)]">
+                      Net Profit: ₹{(newProductPrice - newProductCost).toLocaleString("en-IN")} / unit
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="5"
+                    max="60"
+                    step="1"
+                    value={newProductMargin}
+                    onChange={(e) => handleMarginChange(Number(e.target.value))}
+                    className="w-full accent-[var(--brown)] cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Multi-Channel Syndication Notice */}
+              <div className="text-[11px] font-mono text-[var(--text-muted)] bg-white p-2.5 rounded-xl border border-[rgba(92,61,46,0.08)] flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[var(--stage-green)] shrink-0" />
+                <span>Automatically syndicates to AP2 Agentic Gateway, Amazon, and Flipkart</span>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="btn-secondary py-2 px-4 text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || !newProductName.trim()}
+                  className="btn-primary py-2 px-5 text-xs font-semibold shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Listing Item...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>List in Catalog</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

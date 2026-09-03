@@ -1,0 +1,612 @@
+QUESTIONS 
+
+ [by Technical Lead + Backend Engineer = How do we model the lifecycle of an AP2 PaymentMandate in our system, specifically mapping the three signed mandates (Intent, Cart, Payment) to UPI Autopay e-mandate states (created, authenticated, active, revoked, expired)?
+Why this matters for SRS: We need a precise state machine to define transitions, triggers, and failure modes. The SRS must specify how an AP2 mandate maps to a UPI Autopay mandate, including when a PaymentMandate is considered "executable" and how revocation propagates across both layers without inconsistency.
+
+What are the exact boundaries between the probabilistic reasoning layer and the deterministic guardrail shell in terms of data flow and control?
+Why this matters: The SRS must explicitly define which decisions the LLM can make (e.g., which merchant to choose, what price to accept) and which are hard-enforced by the guardrail shell (e.g., amount caps, merchant allowlist). We need a clear interface contract: what inputs does the guardrail receive from the LLM, what outputs does it return, and how does the LLM react to a rejection? Without this, we risk ambiguous requirements.
+
+Can the external ledger be the single source of truth for both audit and revocation, and how should it synchronize with Razorpay's own mandate/payment state?
+Why this matters: The SRS must define data consistency guarantees. If Razorpay marks a mandate as revoked but our ledger still shows active, the guardrail might allow an invalid payment. We need a reconciliation mechanism and clear ownership of state. Also, how do we handle eventual consistency or conflicts between Razorpay webhooks and our ledger updates?] , [by QA Engineer = Focus: Protocol boundaries, state machines, interoperability, and system-level non-functional requirements.
+State Machine & Timeout Specifications: The UCP checkout session relies on a 6-state machine (incomplete → ... → completed/canceled). What are the exact, hardcoded TTLs (Time-To-Live) for each state transition, and what is the deterministic fallback behavior (e.g., auto-cancel, escalate to HITL) if a transition times out or fails due to a network partition?
+Protocol Degradation & Capability Negotiation: When a buyer agent and seller agent perform capability intersection (L5), what is the exact schema and protocol for graceful degradation if their supported transports (e.g., REST vs. gRPC) or extensions (e.g., Loyalty) do not match? I need the exact error codes and fallback paths to write the negative test cases.
+Performance SLAs & Circuit Breakers: For the "parallel ingestion across all merchant APIs" during discovery, what is the maximum acceptable latency threshold (in milliseconds) before the system triggers a circuit breaker? I need to define the performance SRS, so what constitutes a "pass" for discovery latency under a load of 100 concurrent merchant queries?] , [by Cryptography / Security Engineer = Q1 — Trust boundaries and protocol authority
+
+For each protocol artifact entering the system (A2A Agent Card, A2A message/task, AP2 IntentMandate, CartMandate, PaymentMandate, UCP data), which fields are authoritative for security decisions, who issued/signed them, and where exactly does the system terminate trust?
+
+Why I am asking:
+This determines the SRS requirements for:
+
+trust boundaries;
+signature/authenticity verification;
+which protocol fields may influence payment decisions;
+treatment of all other fields as untrusted data;
+protocol-to-internal-schema mapping.
+
+This is especially important because Google's A2A guidance treats external Agent Cards/messages as untrusted input, while AP2 relies on signed mandate artifacts.
+
+Q2 — Mandate lifecycle and security state machine
+
+What is the exact lifecycle of a payment authorization from issuance → activation → use → expiry → revocation, and which component is authoritative when two pieces of state disagree?
+
+For example:
+
+Can an expired mandate ever be accepted because of cached state?
+Does revocation take effect immediately?
+Can a mandate be replayed?
+Can the same mandate authorize multiple transactions?
+What constitutes a new authorization versus reuse?
+
+Why I am asking:
+This becomes the SRS state machine and security requirements around:
+
+validity;
+expiry;
+revocation;
+replay protection;
+concurrency;
+stale-state handling.
+
+Your architecture explicitly requires revocation status and signed mandates to exist outside the LLM in the persistent ledger.
+
+Q3 — Protocol-to-UPI semantic mapping
+
+When an AP2 PaymentMandate reaches the settlement layer, what exact semantic mapping converts its authorization constraints into UPI-side constraints, and what happens when UPI cannot represent an AP2 constraint exactly?
+
+Examples:
+
+amount;
+merchant identity;
+transaction frequency;
+expiry;
+recurring authorization;
+refundability;
+partial fulfillment.
+
+Why I am asking:
+This identifies a critical SRS requirement: no security property may be silently lost during protocol translation.
+
+If a constraint cannot be enforced by the UPI backend, the system needs an explicit rule such as:
+
+reject transaction / require human approval / downgrade capability
+
+rather than silently ignoring the constraint.] , [by AI / LLM Engineer = Interface Boundary: What is the formal interface specification for passing hard-filtered catalog candidates and soft-preference utility vectors into the LLM context without risking state leakage back into the deterministic execution pipeline?
+
+Negotiation Guardrails: How will the state machine enforce the monotonic offer check and maximum round limit (e.g., timeout or process termination) if the LLM output violates the single-direction offer convergence policy?
+
+Dispute State Integration: What structured payload contract will the LLM receive during human-in-the-loop arbitration escalation, and how will its non-deterministic analysis map back to the append-only ledger?]
+
+ [devops engineer What are the exact external protocol surfaces and trust boundaries the system must expose or consume (A2A Agent Cards, AP2 Intent/Cart/Payment Mandates, UCP manifests, Razorpay webhooks), and which of these must be treated as untrusted input that can never be passed unsanitized into the LLM context?
+What are the hard latency, throughput, and consistency requirements for the mandate-to-settlement path (e.g., maximum end-to-end time from CartMandate acceptance to UPI Reserve Pay / Autopay initiation, and whether the external ledger must provide strong consistency or eventual consistency with explicit ordering guarantees)?
+Which components of the sandwich architecture (probabilistic core, deterministic guardrail shell, external persistent ledger) are allowed to scale independently, and what are the required isolation properties between them (process, container, network, or stronger)?]
+
+
+ANSWERS
+
+ Here are the role-specific answers, written to be directly translatable into numbered SRS requirements with traceability IDs.
+
+---
+
+## **Technical Lead + Backend Engineer**
+
+### **Q1 — AP2 PaymentMandate ↔ UPI Autopay State Machine Mapping**
+
+**Answer:**
+
+We model this as a **layered state machine with strict upstream dependency**. The AP2 mandates are the *authorization layer*; UPI Autopay is the *execution layer*. Our internal ledger is the single reconciler between them.
+
+**State Mapping (SRS-TL-001 through SRS-TL-005):**
+
+| AP2 Layer | Internal Ledger State | UPI Autopay State | Trigger |
+|---|---|---|---|
+| IntentMandate (Open, user-signed) | `intent_issued` | `created` | Constraint Compiler output + user signature |
+| CartMandate (Closed, co-signed) | `cart_authorized` | `authenticated` | Merchant co-signature + Grounding Oracle validation |
+| PaymentMandate (Closed, derived) | `payment_executable` | `active` | Derivation from CartMandate + Policy Engine pass |
+| Executed | `payment_consumed` | `active` (until expiry) | Razorpay execution confirmation webhook |
+| Revoked (any layer) | `cascade_revoked` | `revoked` | User revocation signature → ledger update → Razorpay API call |
+
+**Executable Definition (SRS-TL-006):**
+A PaymentMandate is considered **executable** only when all of the following are true in the ledger:
+1. Upstream CartMandate exists, is unrevoked, and its TTL > `now()`.
+2. Upstream IntentMandate exists, is unrevoked, and `amount ≤ intent.constraints.max_spend`.
+3. PaymentMandate TTL > `now()`.
+4. `human_present` flag matches the flow type (human-present vs. not-present).
+5. Merchant DID resolves to a valid Razorpay `merchant_id` in our registry.
+
+**Revocation Propagation (SRS-TL-007):**
+Revocation is **cascading and atomic in the ledger**. If an IntentMandate is revoked, all downstream CartMandates and PaymentMandates are immediately marked `cascade_revoked` via a single PostgreSQL transaction. The ledger then emits an async event to Razorpay to mirror the state. If the Razorpay API call fails, the mandate remains `cascade_revoked` in our system; the Payment Adapter blocks any execution attempt against a revoked mandate regardless of Razorpay's cached state. Reconciliation is webhook-driven with a 5-second SLA.
+
+---
+
+### **Q2 — Probabilistic vs. Deterministic Boundary**
+
+**Answer:**
+
+The boundary is a **unidirectional data flow with a typed gate**. The LLM operates in a sandboxed context and produces a *proposal*; the guardrail shell validates it and produces an *action*.
+
+**Data Flow Contract (SRS-TL-008 through SRS-TL-012):**
+
+```
+[Human Intent] → ConstraintCompiler (deterministic) → CompiledConstraints (JSON, hashed)
+                        ↓
+[LLM Sandbox] ← receives: CompiledConstraints + CatalogCandidates + UtilityVectors
+                        ↓
+[LLM Output] → ProposalObject (Pydantic schema: selected_merchant, offer_price, reasoning)
+                        ↓
+[Guardrail Shell] ← receives: ProposalObject + CompiledConstraints + GroundingOracleManifests
+   ├── SchemaValidator (structure check)
+   ├── PolicyEngine (hard rule check: max_spend, allowlist, category_block)
+   ├── GroundingOracle (price/merchant verification against signed UCP manifest)
+   └── MonotonicityCheck (offer convergence)
+                        ↓
+[Guardrail Output] → ActionEnum: ALLOW | MODIFY | REJECT | HITL_ESCALATE
+```
+
+**LLM Authority (what it CAN decide):**
+- Which merchant to select from the grounded candidate list.
+- What price to offer within the compiled constraint bounds.
+- What reasoning to generate for the choice.
+
+**Guardrail Authority (what it MUST enforce):**
+- `offer_price ≤ compiled_constraints.max_spend` (hard reject if violated).
+- `selected_merchant ∈ compiled_constraints.allowed_merchants` (hard reject).
+- `selected_merchant.category ∉ compiled_constraints.blocked_categories` (hard reject).
+- Offer must be strictly monotonic vs. previous round (hard reject on violation).
+
+**Rejection Protocol (SRS-TL-013):**
+On `REJECT`, the guardrail returns a structured `RejectionContext` to the LLM containing:
+- `violated_constraint` (enum, e.g., `MAX_SPEND_EXCEEDED`).
+- `constraint_value` (e.g., `max_spend: 5000`).
+- `proposed_value` (e.g., `offer_price: 5500`).
+- `retry_count` (max 3 retries per decision point).
+
+The LLM must regenerate the ProposalObject within bounds. After 3 rejections, automatic `HITL_ESCALATE`.
+
+---
+
+### **Q3 — External Ledger as Single Source of Truth**
+
+**Answer:**
+
+**Yes, with caveats (SRS-TL-014 through SRS-TL-019).**
+
+The **external ledger (PostgreSQL with outbox pattern) is the SSOT for audit and revocation**. Razorpay is an *executor* with its own state cache, but it is not authoritative for our business logic.
+
+**Consistency Model:**
+- **Revocation:** Our ledger is strictly authoritative. A revocation is committed to our ledger first, then propagated to Razorpay. If Razorpay reports "active" but our ledger says "revoked," the Payment Adapter blocks execution. The Razorpay state is treated as stale until the webhook/polling sync confirms alignment.
+- **Execution Confirmation:** Razorpay is authoritative for "did the money move?" Their webhook confirmation is written to our ledger as an immutable event. If our ledger shows `payment_executable` but Razorpay rejects the execution, Razorpay wins for that transaction attempt, and the ledger transitions to `execution_failed` with Razorpay's error code.
+
+**Reconciliation Mechanism:**
+1. **Webhook-primary:** Razorpay webhooks update our ledger via idempotent event handlers (idempotency key = `mandate_id + event_timestamp`).
+2. **Polling fallback:** If webhook delivery fails for >30 seconds, a cron job polls Razorpay's mandate status API every 30s until alignment is restored.
+3. **Conflict resolution:** If Razorpay marks a mandate as `revoked` but our ledger shows `active` (e.g., user revoked via our UI but webhook was delayed), our system accepts the Razorpay revocation as ground truth for *execution* but logs the discrepancy for audit. The user-facing state remains "revoked" (user intent is supreme).
+
+**Eventual Consistency SLA (SRS-TL-020):**
+Mandate state must be synchronized across ledger and Razorpay within **5 seconds** (P99) under normal load. During partition, the ledger operates autonomously; Razorpay sync is best-effort with exponential backoff.
+
+---
+
+## **QA Engineer**
+
+### **Q1 — UCP Checkout State Machine: TTLs & Deterministic Fallbacks**
+
+**Answer:**
+
+**Hardcoded TTLs per state transition (SRS-QA-001 through SRS-QA-006):**
+
+| State | TTL | Trigger for Exit | Fallback on Timeout / Network Partition |
+|---|---|---|---|
+| `incomplete` | 6 hours | Buyer submits cart | Auto-cancel with reason `SESSION_EXPIRED` |
+| `requires_escalation` | 24 hours | Human approves/declines via HITL | Auto-cancel with reason `HITL_TIMEOUT` |
+| `ready_for_complete` | 15 minutes | Payment authorization received | Release cart lock, return to `incomplete` or auto-cancel (configurable per merchant) |
+| `complete_in_progress` | 5 minutes | Razorpay webhook confirmation | Query payment status via Razorpay API. If status unknown after 3 retries → transition to `payment_pending_reconciliation` + HITL flag |
+| `completed` | Terminal (archive after 90 days) | N/A | N/A |
+| `canceled` | Terminal (archive after 90 days) | N/A | N/A |
+
+**Network Partition Behavior (SRS-QA-007):**
+If the transition from `complete_in_progress` fails due to a partition (no webhook, API timeout), the system must:
+1. Retry Razorpay status query with exponential backoff (3 attempts: immediate, 5s, 15s).
+2. If still unknown, transition to `payment_pending_reconciliation` (a non-terminal holding state).
+3. A reconciliation worker polls every 60s until resolution.
+4. After 24 hours in `payment_pending_reconciliation`, auto-escalate to HITL with full session context.
+
+---
+
+### **Q2 — Protocol Degradation & Capability Negotiation**
+
+**Answer:**
+
+**Exact Schema for Graceful Degradation (SRS-QA-008 through SRS-QA-012):**
+
+Capability intersection is performed on the **L5 Discovery Service** using JSON Schema `allOf` merge.
+
+**Transport Fallback:**
+- If buyer supports `[REST, gRPC]` and seller supports `[gRPC, WebSocket]`, intersection = `gRPC`.
+- If intersection is empty, **mandatory fallback to REST** (both parties MUST support REST as baseline per UCP L3 binding spec).
+- If seller does not support REST, return error code `UCP_TRANSPORT_UNAVAILABLE` (HTTP 422).
+
+**Extension Fallback:**
+- If seller advertises `Loyalty` extension but buyer does not, negotiation proceeds **without** the extension. No error.
+- If seller **requires** an extension (e.g., `Fulfillment` for physical goods) and buyer does not support it, return error code `UCP_CAPABILITY_MISMATCH` (HTTP 422) with body:
+  ```json
+  {
+    "error_code": "UCP_CAPABILITY_MISMATCH",
+    "required_extension": "Fulfillment",
+    "buyer_capabilities": ["Checkout", "Catalog"],
+    "seller_capabilities": ["Checkout", "Catalog", "Fulfillment"]
+  }
+  ```
+
+**Negative Test Cases Required:**
+1. **Transport degradation:** gRPC-only seller, REST-only buyer → verify REST fallback succeeds.
+2. **Extension skip:** Seller offers Loyalty, buyer ignores → verify checkout proceeds without loyalty fields.
+3. **Extension hard fail:** Seller requires Fulfillment for a physical product, buyer doesn't support → verify `UCP_CAPABILITY_MISMATCH` with correct payload.
+4. **Empty intersection:** Seller supports only MCP transport, buyer supports only A2A → verify `UCP_TRANSPORT_UNAVAILABLE`.
+
+---
+
+### **Q3 — Performance SLAs & Circuit Breakers**
+
+**Answer:**
+
+**Discovery Latency SLA (SRS-QA-013 through SRS-QA-016):**
+
+- **P95 latency threshold:** 2000ms for a full discovery session (query → capability intersection → manifest retrieval).
+- **Load target:** 100 concurrent buyer agent sessions, each querying up to 10 merchant APIs in parallel.
+- **Pass criteria:** ≥95% of sessions complete within 2000ms; 100% complete within 5000ms (hard timeout).
+- **Per-merchant timeout:** 500ms connection timeout, 2000ms total read timeout.
+
+**Circuit Breaker Configuration:**
+- **Open condition:** P95 latency > 2000ms for a rolling 30-second window, OR error rate > 20% over 1 minute.
+- **Open duration:** 60 seconds.
+- **Half-open test:** After 60s, allow 1 probe request. If success, close circuit; if fail, re-open for another 60s.
+- **Fallback on open circuit:** Return cached UCP manifest (max staleness: 5 minutes). If no cache, escalate to HITL with reason `DISCOVERY_UNAVAILABLE`.
+
+**Test Harness Requirement:**
+QA must maintain a **hermetic mock merchant fleet** (10 simulated merchant endpoints) to validate these SLAs without external dependency flakiness.
+
+---
+
+## **Cryptography / Security Engineer**
+
+### **Q1 — Trust Boundaries & Protocol Authority**
+
+**Answer:**
+
+**Trust termination happens at the Grounding Oracle. No unsigned field may influence a payment decision. (SRS-SEC-001 through SRS-SEC-012)**
+
+| Protocol Artifact | Authoritative Fields (Influence Payment) | Issuer / Signer | Trust Termination | Untrusted Fields (Display Only) |
+|---|---|---|---|---|
+| **A2A AgentCard** | `url`, `capabilities`, `skills`, `authSchemes`, `signature` | Merchant DID | JWS/ECDSA P-256 verification against DID document | `name`, `description`, `version` (UI only) |
+| **A2A Message/Task** | `task.id`, `status`, `artifacts` (if signed) | Sender Agent DID | JWS verification per A2A L2 spec | `message.parts.text` (sandboxed data, never executed) |
+| **AP2 IntentMandate** | `issuer_did`, `constraints`, `ttl`, `allowed_merchants`, `signature` | User DID | ECDSA P-256 + DID resolution | `llm_confidence`, `soft_preferences` (advisory only) |
+| **AP2 CartMandate** | `upstream_mandate_id`, `merchant_did`, `items`, `total`, `merchant_signature`, `user_signature` | User DID + Merchant DID | Both signatures required; cross-verify against IntentMandate | `negotiation_round` (metadata) |
+| **AP2 PaymentMandate** | `upstream_mandate_id`, `amount`, `human_present`, `agent_id`, `signature` | Derived from CartMandate | Signature chain validation back to user DID | `reasoning` (audit log only) |
+| **UCP Manifest** | `merchant_id`, `capabilities`, `endpoint_url`, `trust_credentials` | Merchant DID | JWS verification; manifest hash pinned in Grounding Oracle | `marketing_copy`, `brand_assets` |
+
+**Critical Rule (SRS-SEC-013):** Any field not listed as "Authoritative" is treated as **untrusted data** and is physically isolated from the deterministic execution pipeline. The LLM may read `name` or `description` for reasoning, but the Guardrail Shell ignores them for payment decisions.
+
+---
+
+### **Q2 — Mandate Lifecycle & Security State Machine**
+
+**Answer:**
+
+**Exact Lifecycle (SRS-SEC-014 through SRS-SEC-023):**
+
+```
+issued (user signs IntentMandate)
+    ↓
+activated (CartMandate co-signed by merchant; PaymentMandate derived)
+    ↓
+used (PaymentMandate nonce consumed by ledger, Razorpay executes)
+    ↓
+expired (TTL reached) OR revoked (explicit action)
+```
+
+**Security Invariants:**
+
+- **Expired mandate acceptance (SRS-SEC-015):** **NEVER.** TTL is checked at every validation gate: Guardrail Shell entry, Payment Adapter entry, and Razorpay order creation. No cache may bypass this check. The ledger stores `expires_at` as an absolute timestamp; all components read it fresh from the SSOT.
+- **Revocation immediacy (SRS-SEC-016):** Immediate in the ledger. The ledger is the authority; Razorpay is notified asynchronously. If Razorpay hasn't processed the revocation yet, our Payment Adapter blocks the execution with error `MANDATE_REVOKED_LOCALLY`.
+- **Replay protection (SRS-SEC-017):** Each PaymentMandate contains a cryptographically random 256-bit `nonce`. The ledger maintains an append-only `consumed_nonces` set. A PaymentMandate is valid for exactly one transaction. Any reuse attempt returns `REPLAY_DETECTED`.
+- **New vs. reuse (SRS-SEC-018):** New authorization requires a new PaymentMandate with a new nonce. "Reuse" is architecturally impossible.
+- **Concurrency & stale state (SRS-SEC-019):** Optimistic locking on the ledger. Each mandate record has a `version` integer. Concurrent revocation and execution race: the revocation transaction increments the version; the execution transaction checks the version at read time and aborts if changed. Revocation always wins.
+
+---
+
+### **Q3 — Protocol-to-UPI Semantic Mapping**
+
+**Answer:**
+
+**No security property may be silently lost. (SRS-SEC-024 through SRS-SEC-033)**
+
+| AP2 Constraint | UPI Representation | Rule if UPI Cannot Represent Exactly |
+|---|---|---|
+| **Amount** | Exact INR paise value | Must match exactly. If Razorpay reports a different amount than AP2 `amount`, **REJECT** transaction. |
+| **Merchant Identity** | Razorpay `merchant_id` resolved from DID | If DID→merchant_id mapping fails or returns multiple candidates, **REJECT**. |
+| **Transaction Frequency** | UPI Autopay `frequency` (AS_PRESENT, MONTHLY, etc.) | If AP2 `constraints.frequency` is not in UPI enum, **REQUIRE_HUMAN_APPROVAL** or **REJECT**. |
+| **Expiry** | UPI mandate `expiryDate` | Use **stricter** of AP2 TTL and UPI expiry. If UPI expiry < AP2 TTL, **REJECT** (cannot guarantee AP2 constraint). |
+| **Recurring Authorization** | UPI Autopay e-mandate | Supported natively. If UPI Autopay unavailable for merchant, **REJECT** recurring IntentMandate. |
+| **Refundability** | UPI supports refunds unconditionally | If AP2 `constraints.refundable = false`, **REJECT** (UPI cannot enforce non-refundability). |
+| **Partial Fulfillment** | UPI does not support partial authorization natively | If AP2 `constraints.allow_partial = true`, system implements via multiple UPI transactions capped at total amount. If `allow_partial = false`, exact amount required; partial UPI success is treated as failure and reversed. |
+
+**Explicit Downgrade Rule (SRS-SEC-034):**
+If any AP2 constraint cannot be represented or enforced by the UPI backend, the system must take one of three explicit actions:
+1. `REJECT_TRANSACTION` — default for hard constraints (amount, expiry, merchant identity).
+2. `HITL_ESCALATE` — for ambiguous cases (frequency mismatch on non-critical subscriptions).
+3. `CAPABILITY_DOWNGRADE` — for soft constraints (e.g., proceed without Loyalty extension), logged but not requiring human approval.
+
+**Silent loss is a Severity-1 security bug.** The mapping layer must emit a `constraint_enforcement_audit` event for every transaction, listing all AP2 constraints and their UPI enforcement status.
+
+---
+
+## **AI / LLM Engineer**
+
+### **Q1 — Formal Interface: Catalog Candidates & Utility Vectors**
+
+**Answer:**
+
+**The interface is a read-only, strongly-typed context injection with no execution path back to the pipeline. (SRS-AI-001 through SRS-AI-007)**
+
+**Input Schema (`LLMContext`):**
+```json
+{
+  "candidates": [
+    {
+      "product_id": "uuid",
+      "merchant_did": "did:web:merchant.example",
+      "price": 4999.00,
+      "currency": "INR",
+      "category": "electronics",
+      "grounding_verified": true,
+      "manifest_hash": "sha256:abc123..."
+    }
+  ],
+  "preferences": {
+    "utility_vector": {
+      "price_weight": 0.4,
+      "quality_weight": 0.3,
+      "delivery_speed_weight": 0.3
+    }
+  },
+  "constraints": {
+    "max_spend": 5000,
+    "allowed_merchants": ["did:web:merchant1.example", "did:web:merchant2.example"],
+    "blocked_categories": ["gambling"]
+  },
+  "output_schema": "ProposalObject_v1"
+}
+```
+
+**State Leakage Prevention:**
+- Candidates, preferences, and constraints are marked `readOnly` in the MCP tool definition.
+- The LLM receives these as **data context**, not as executable instructions.
+- The LLM's only writable output is the `ProposalObject` Pydantic model with fields:
+  - `selected_candidate_id` (string, must match a candidate product_id)
+  - `offer_price` (float, must be ≤ constraints.max_spend)
+  - `reasoning` (string, max 1000 chars, logged but not parsed by execution pipeline)
+
+**Execution Pipeline Isolation:**
+The deterministic shell reads only `selected_candidate_id` and `offer_price` from the LLM output. The `reasoning` field is written to the audit log but is **never evaluated as code or constraint**. If the LLM attempts to output additional fields, the SchemaValidator rejects it before the Guardrail Shell sees it.
+
+---
+
+### **Q2 — Negotiation Guardrails: Monotonicity & Round Limits**
+
+**Answer:**
+
+**Enforcement is entirely in the PolicyEngine, not the LLM. The LLM is a proposal generator; the guardrail is the referee. (SRS-AI-008 through SRS-AI-014)**
+
+**Monotonicity Check:**
+- Each round, the PolicyEngine stores the `best_offer` (lowest price, best terms).
+- The LLM's new `ProposalObject.offer_price` must be **≤ previous best_offer** (strict improvement for buyer).
+- If `offer_price > previous_best_offer`, PolicyEngine returns `MONOTONICITY_VIOLATION` with context:
+  ```json
+  {"previous_best": 4500, "proposed": 4700, "violation_type": "price_increase"}
+  ```
+- The LLM must regenerate. After **3 violations**, the session auto-cancels with reason `NEGOTIATION_DIVERGENCE`.
+
+**Round Limit Enforcement:**
+- Hard limit: **10 rounds** (from project brief).
+- The PolicyEngine maintains a `round_counter` in the session state. It is incremented **before** the LLM is invoked.
+- If `round_counter > 10`, the LLM is not invoked. The system evaluates the best offer collected so far:
+  - If best offer satisfies constraints → proceed to CartMandate generation.
+  - If no acceptable offer → cancel with reason `NEGOTIATION_MAX_ROUNDS`.
+
+**Timeout:**
+- Per-round LLM timeout: **30 seconds**.
+- If timeout, the last valid offer is frozen. If `round_counter < 10`, the LLM may retry once. If second timeout, cancel.
+
+---
+
+### **Q3 — Dispute State Integration & HITL Arbitration**
+
+**Answer:**
+
+**The LLM acts as an advisory analyst, not a decision maker. Its output is append-only. (SRS-AI-015 through SRS-AI-021)**
+
+**Structured Payload (`ArbitrationContext`):**
+```json
+{
+  "dispute_id": "uuid",
+  "cart_mandate": { /* full CartMandate object */ },
+  "payment_mandate": { /* full PaymentMandate object */ },
+  "merchant_evidence": {
+    "signature": "jws...",
+    "claim": "product_delivered",
+    "timestamp": "2026-08-26T18:00:00Z"
+  },
+  "buyer_agent_reasoning_log": ["round_1: offered 4500", "round_2: accepted 4700"],
+  "grounding_oracle_verification": true,
+  "policy_violations": ["delivery_oracle_mismatch"]
+}
+```
+
+**LLM Output Schema (`ArbitrationRecommendation`):**
+```json
+{
+  "resolution_recommendation": "approve_buyer | approve_merchant | split | escalate_human",
+  "confidence_score": 0.85,
+  "reasoning": "Merchant evidence lacks delivery oracle signature..."
+}
+```
+
+**Append-Only Ledger Mapping:**
+- The LLM's `ArbitrationRecommendation` is hashed (SHA-256) and appended as a new ledger record:
+  - `record_type: "llm_arbitration_advisory"`
+  - `dispute_id`, `timestamp`, `recommendation`, `confidence`, `hash`
+- This record does **not** modify the dispute state. It is purely advisory.
+- The human reviewer (or auto-resolver if confidence > 0.95 and no policy violations) writes the final `resolution` record.
+- If LLM `confidence_score < 0.90`, the system **automatically overrides** the recommendation to `escalate_human`, regardless of the LLM's stated preference.
+
+**Audit Trail Requirement:**
+The final ledger must contain, in order:
+1. Original PaymentMandate.
+2. Dispute initiation event.
+3. LLM advisory (this answer).
+4. Human resolution (or auto-resolution with justification).
+5. Execution of resolution (refund, release escrow, etc.).
+
+---
+
+**These 12 answers are now ready to be synthesized into formal SRS sections.** Each bullet above can be converted into a numbered requirement with a unique ID (e.g., SRS-TL-001), a description, a priority (Must/Should/Could), and a verification method (test case, inspection, demonstration).
+
+ Here are the DevOps Lead answers, written to slot directly into the SRS as numbered non-functional requirements.
+
+---
+
+## **DevOps Lead**
+
+### **Q1 — External Protocol Surfaces, Trust Boundaries & LLM Sanitization**
+
+**Answer:**
+
+**Every byte entering the system from an external agent or merchant is untrusted until cryptographically verified. No external payload may enter the LLM context without passing through the sanitization boundary. (SRS-DEVOPS-001 through SRS-DEVOPS-015)**
+
+**Protocol Surface Inventory:**
+
+| Surface | Direction | Transport | Trust Boundary | Sanitization Gate |
+|---|---|---|---|---|
+| **A2A Agent Card** | Inbound (consumed) | HTTPS GET `/.well-known/agent-card.json` | Untrusted | JWS/ECDSA verification + Schema Validator → Grounding Oracle |
+| **A2A Task/Message** | Bidirectional | JSON-RPC 2.0 over HTTPS | Untrusted | JWS verification per sender DID → untrusted text sandboxed |
+| **AP2 IntentMandate** | Inbound (from user agent) | HTTPS POST to Trust Service | Trusted *after* signature verification | ECDSA P-256 + DID resolution → Policy Engine |
+| **AP2 CartMandate** | Inbound (from merchant) | HTTPS POST to Commerce Engine | Trusted *after* co-signature verification | Both signatures verified → ledger append |
+| **AP2 PaymentMandate** | Internal (derived) | Internal gRPC/HTTP | Trusted (derived from CartMandate) | Ledger nonce check + Policy Engine |
+| **UCP Manifest** | Inbound (consumed) | HTTPS GET `/.well-known/ucp` | Untrusted | JWS verification + manifest hash pinned in Grounding Oracle |
+| **Razorpay Webhook** | Inbound (consumed) | HTTPS POST | Untrusted | HMAC-SHA256 verification with shared secret → idempotency check |
+| **Razorpay API** | Outbound (called) | HTTPS REST | Trusted (mTLS + API key) | Request signed by Payment Adapter only |
+| **Shopify REST API** | Outbound (polled) | HTTPS REST | Trusted (API key) | Poll-only, no inbound surface |
+| **LLM API (OpenAI/Claude)** | Outbound (called) | HTTPS REST | Trusted (API key + TLS) | Prompt injection guard strips untrusted text |
+
+**Critical Rule — The Sanitization Boundary (SRS-DEVOPS-016):**
+The system maintains a **physical network boundary** between the **Untrusted Ingestion Zone** (public-facing load balancers, A2A/UCP discovery endpoints, Razorpay webhook receivers) and the **LLM Context Zone** (MCP server, reasoning runtime).
+
+Data flow is strictly:
+```
+Untrusted Ingestion Zone
+    ↓
+Grounding Oracle / Schema Validator / Signature Verifier
+    ↓
+[Deterministic Output] → enters LLM Context Zone as read-only structured context
+    ↓
+LLM generates ProposalObject
+    ↓
+[Deterministic Output] exits LLM Context Zone → Guardrail Shell
+```
+
+**Fields that can NEVER reach the LLM unsanitized (SRS-DEVOPS-017):**
+- Raw HTML/JSON from merchant product feeds.
+- Free-text `description`, `name`, or `marketing_copy` from A2A Agent Cards or UCP manifests.
+- User-generated reviews or third-party site content.
+- Any text field longer than 4,096 characters (hard truncation + hash replacement).
+
+**Sanitization Method:**
+All free text is replaced with a **canonical digest** before reaching the LLM:
+- `description` → `description_hash: sha256:abc...` (LLM sees the hash, not the text).
+- If the LLM requires semantic understanding of the product, the Grounding Oracle pre-extracts structured tags (`category`, `price`, `rating`) and injects those as typed fields. The raw text never crosses the boundary.
+
+**A2A Task Text Handling (SRS-DEVOPS-018):**
+A2A `Message.parts.text` is stored in an isolated **untrusted blob store** (S3) with a content-addressable hash. The LLM receives only the hash and a `content_type: text/plain` metadata tag. If the LLM needs to quote the text, it must request it via a sandboxed MCP tool that returns the text with `data_only` flag set — the text is rendered as data, never executed as instructions.
+
+---
+
+### **Q2 — Hard Latency, Throughput & Consistency Requirements**
+
+**Answer:**
+
+**The mandate-to-settlement path is a soft real-time pipeline with hard consistency requirements at the ledger layer. (SRS-DEVOPS-019 through SRS-DEVOPS-030)**
+
+**End-to-End Latency Budget (CartMandate → UPI Autopay Initiation):**
+
+| Stage | Max Latency | Rationale |
+|---|---|---|
+| CartMandate accepted → PaymentMandate derived | **200ms** | Ledger write + nonce generation + Policy Engine pass |
+| PaymentMandate → Razorpay order creation | **1500ms** | Razorpay API round-trip (P99) |
+| Razorpay order → UPI Autopay initiation | **2000ms** | UPI collect request + bank notification |
+| **Total E2E (CartMandate → UPI initiated)** | **≤ 4000ms (4 seconds)** | Hard SLA; breach triggers HITL escalation |
+
+**Throughput (SRS-DEVOPS-023):**
+- Target: **100 concurrent checkout sessions** with parallel negotiation (10 merchants each = 1000 merchant API calls in flight).
+- Sustained: **10 mandates settled per second** through the Payment Adapter.
+- Burst: **50 mandates per second** for 60 seconds before backpressure kicks in.
+
+**Ledger Consistency Model (SRS-DEVOPS-024):**
+The external ledger **must provide strong consistency (serializable isolation)** for:
+- `consumed_nonces` set (replay protection).
+- Mandate state transitions (`issued` → `activated` → `used` → `revoked`).
+- Outbox pattern event ordering (events must be published to Kafka in the exact order they were committed to PostgreSQL).
+
+**Why strong consistency:** An eventually consistent ledger allows two parallel requests to read `active` for the same mandate, resulting in double-spend. The ledger uses PostgreSQL `SERIALIZABLE` isolation level for mandate tables. Read replicas may be used for analytics and audit queries, but **all payment decisions read from the primary**.
+
+**Explicit Ordering Guarantees (SRS-DEVOPS-025):**
+- Outbox events are ordered by a **strictly monotonic `event_sequence` bigint** (not a timestamp).
+- Kafka partition key = `mandate_id` (guarantees all events for a single mandate are ordered within one partition).
+- Consumers process events in `event_sequence` order; out-of-sequence events are buffered until the gap is filled.
+
+**Razorpay Webhook Consistency (SRS-DEVOPS-026):**
+Webhooks are processed idempotently with a 5-second SLA to ledger update. If the ledger commit succeeds but the webhook acknowledgment fails, Razorpay retries. The ledger handles retries via idempotency key (`mandate_id + event_id`). The webhook receiver returns `200 OK` only after the ledger commit is durable.
+
+---
+
+### **Q3 — Scaling Independence & Isolation Properties**
+
+**Answer:**
+
+**The three layers of the sandwich must scale independently and be isolated at the network level. (SRS-DEVOPS-031 through SRS-DEVOPS-045)**
+
+**Scaling Topology:**
+
+| Component | Scaling Model | Why Independent |
+|---|---|---|
+| **Deterministic Guardrail Shell** (Constraint Compiler, Policy Engine, Schema Validator, Grounding Oracle) | Horizontal (stateless containers, CPU-bound) | High throughput, no session affinity. Can scale to 100+ replicas based on checkout request rate. |
+| **Probabilistic Core** (LLM via MCP, reasoning runtime) | Horizontal with queue backpressure (GPU/LLM API quota-bound) | LLM calls are expensive and slow (1-5s per call). Must scale independently and not block the deterministic shell. Uses an internal async job queue (Redis/RabbitMQ). |
+| **External Persistent Ledger** (PostgreSQL + Kafka outbox) | Vertical + read replicas (disk I/O bound) | Strong consistency requires a single primary. Scales via read replicas for audit queries and via connection pooling (PgBouncer). |
+
+**Required Isolation Levels (SRS-DEVOPS-036):**
+
+| Boundary | Isolation Level | Enforcement Mechanism |
+|---|---|---|
+| **Guardrail Shell ↔ Probabilistic Core** | **Process + Network isolation** | Separate Kubernetes Deployments. Communication via internal API (REST/gRPC) only, never shared memory. The LLM container has **no direct access** to the ledger database or Razorpay API keys. |
+| **Probabilistic Core ↔ Untrusted Ingestion** | **Network isolation + Data diode** | Untrusted ingestion runs in a DMZ namespace. Only structured, validated outputs pass through the Grounding Oracle into the LLM context. Firewall rules block the LLM pods from initiating outbound connections to merchant endpoints or the public internet (egress restricted to LLM API only). |
+| **Ledger ↔ All Other Components** | **Database-level isolation** | Each module connects via distinct PostgreSQL roles with least-privilege grants. The LLM pods have **zero database credentials**. Only the Commerce Engine and Payment Adapter can write to mandate tables. |
+| **Cryptographic Key Material ↔ Application Runtime** | **Hardware or container-level isolation** | DID signing keys are held in HashiCorp Vault or AWS KMS. The application receives short-lived JWT tokens (TTL: 1 hour) for signing operations, never the raw private key. Keys are injected via init container, not environment variables. |
+
+**Container Security (SRS-DEVOPS-040):**
+- LLM runtime containers run as **non-root** with read-only root filesystems.
+- No `sudo`, no shell access, no `curl` binary (distroless image).
+- Memory limits enforced via Kubernetes limits to prevent OOM from large context windows.
+
+**Network Policy (SRS-DEVOPS-041):**
+- **Default deny** all inter-pod traffic.
+- Explicit allow-list:
+  - Guardrail Shell → Ledger (port 5432, PostgreSQL)
+  - Guardrail Shell → LLM Core (port 8080, internal API)
+  - Payment Adapter → Razorpay API (port 443, HTTPS)
+  - UCP Adapter → Shopify API (port 443, HTTPS)
+  - Webhook Receiver → Guardrail Shell (port 8080, internal API)
+
+**Stronger Isolation for HSM (SRS-DEVOPS-042):**
+If HSM is used (AWS CloudHSM, Google Cloud HSM), the signing module runs in a **separate VPC** with private connectivity via AWS PrivateLink or Cloud Interconnect. The application never holds the HSM partition password; it is injected at boot by a sidecar that authenticates via IAM role.
+
+---
+

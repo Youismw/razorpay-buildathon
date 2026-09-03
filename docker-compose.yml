@@ -1,0 +1,73 @@
+version: "3.9"
+
+networks:
+  net-untrusted:
+    driver: bridge
+  net-llm:
+    driver: bridge
+    internal: true # No external egress allowed from LLM reasoning core
+  net-guardrail:
+    driver: bridge
+    internal: true
+  net-signing:
+    driver: bridge
+    internal: true
+  net-settlement:
+    driver: bridge
+    internal: false # Egress allowed only for Razorpay API
+  net-ledger:
+    driver: bridge
+    internal: true
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: agentic-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ledger_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ledger_secure_password_dev_123}
+      POSTGRES_DB: ${POSTGRES_DB:-agentic_upi}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init:/docker-entrypoint-initdb.d
+    networks:
+      - net-ledger
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ledger_admin} -d ${POSTGRES_DB:-agentic_upi}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: agentic-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - net-guardrail
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: agentic-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686" # Jaeger Web UI
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - net-guardrail
+      - net-ledger
+
+volumes:
+  postgres_data:
