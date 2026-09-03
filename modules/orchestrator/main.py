@@ -1482,7 +1482,8 @@ async def buy_stream(req: BuyRequest):
         # 2. AI Reasoning
         if req.simulate_failure_stage == 2 or req.llm_provider == "fail-reasoning":
             err_msg = "Reasoning Failure: No matching product found in merchant catalog for ungrounded query schema."
-            yield f"data: {json.dumps({'event': 'AI_THOUGHT', 'step_index': 1, 'text': f'Parsed buyer intent -> Query \"{req.raw_intent}\" not indexed in merchant UCP catalog.', 'timestamp': ts()})}\n\n"
+            thought_text = f"Parsed buyer intent -> Query '{req.raw_intent}' not indexed in merchant UCP catalog."
+            yield f"data: {json.dumps({'event': 'AI_THOUGHT', 'step_index': 1, 'text': thought_text, 'timestamp': ts()})}\n\n"
             await asyncio.sleep(0.2)
             yield f"data: {json.dumps({'event': 'AI_THOUGHT', 'step_index': 2, 'text': 'Zero candidate SKUs satisfy grounding constraints.', 'timestamp': ts()})}\n\n"
             await asyncio.sleep(0.2)
