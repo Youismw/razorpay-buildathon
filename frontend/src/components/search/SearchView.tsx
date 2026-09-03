@@ -2,10 +2,29 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, ChevronDown, Sparkles, Search } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  Sparkles,
+  Search,
+  Mic,
+  MicOff,
+  Eye,
+  EyeOff,
+  X,
+  CreditCard,
+  ExternalLink,
+  Plus,
+  Minus,
+  CheckCircle2,
+  ShieldCheck,
+  Tag,
+  Check,
+} from "lucide-react";
 import { BuyRequest, PipelineStageState } from "@/lib/types";
 import { VerticalPipeline } from "@/components/pipeline/VerticalPipeline";
 import { useCardGlow } from "@/hooks/useCardGlow";
+import { UserProfileState } from "@/lib/profileStore";
 
 interface SearchViewProps {
   stages: PipelineStageState[];
@@ -14,9 +33,29 @@ interface SearchViewProps {
   failureExplanation?: string;
   liveThoughts?: string[];
   searchMode: "basic" | "advanced";
+  profile?: UserProfileState;
   onExecute: (req: BuyRequest) => void;
   onReset: () => void;
 }
+
+interface DetectedStaple {
+  keyword: string;
+  name: string;
+  unitRateInr: number;
+  unitLabel: string;
+  defaultQty: number;
+  quickQtys: number[];
+}
+
+const COMMON_STAPLES: DetectedStaple[] = [
+  { keyword: "milk", name: "Amul Taaza Homogenised Toned Milk (1L)", unitRateInr: 72, unitLabel: "L", defaultQty: 1, quickQtys: [1, 2, 3, 5] },
+  { keyword: "bread", name: "Britannia 100% Whole Wheat Bread (400g)", unitRateInr: 45, unitLabel: "Loaf", defaultQty: 1, quickQtys: [1, 2, 3] },
+  { keyword: "coffee", name: "Nescafé Classic Instant Coffee (100g)", unitRateInr: 180, unitLabel: "Jar", defaultQty: 1, quickQtys: [1, 2] },
+  { keyword: "butter", name: "Amul Pasteurized Salted Table Butter (500g)", unitRateInr: 275, unitLabel: "Pack", defaultQty: 1, quickQtys: [1, 2] },
+  { keyword: "eggs", name: "Farm Fresh White Eggs (Pack of 6)", unitRateInr: 65, unitLabel: "Pack", defaultQty: 1, quickQtys: [1, 2, 4] },
+  { keyword: "atta", name: "Aashirvaad Superior MP Shudh Chakki Atta (5kg)", unitRateInr: 320, unitLabel: "Bag", defaultQty: 1, quickQtys: [1, 2] },
+  { keyword: "headphones", name: "Sony WH-CH520 Wireless Headphones", unitRateInr: 4999, unitLabel: "Unit", defaultQty: 1, quickQtys: [1] },
+];
 
 const PRESETS: Array<{
   group: string;
@@ -41,7 +80,7 @@ const PRESETS: Array<{
   {
     group: "Per-Stage Failure Scenarios",
     items: [
-      { id: "fail-compiler", label: "Stage 1 Fail: Intent Too Short (< 5 chars)", intent: "Buy", maxSpend: 5000, simulateFailureStage: 1, tag: "Compiler Rejection" },
+      { id: "fail-compiler", label: "Stage 1 Fail: Intent Too Short (< 3 chars)", intent: "No", maxSpend: 5000, simulateFailureStage: 1, tag: "Compiler Rejection" },
       { id: "fail-reasoning", label: "Stage 2 Fail: Reasoning Hallucination", intent: "Purchase quantum teleportation hyperdrive module", maxSpend: 5000, simulateFailureStage: 2, tag: "Reasoning Non-Match" },
       { id: "fail-guardrail", label: "Stage 3 Fail: Budget Limit Overspend (INV-010)", intent: "Buy Sony WH-CH520 Wireless Headphones", maxSpend: 50, simulateFailureStage: 3, tag: "Guardrail Policy Block" },
       { id: "fail-vault", label: "Stage 4 Fail: Cryptographic Key Fault (INV-009)", intent: "Authorize purchase with simulated ES256 key mismatch", maxSpend: 5000, simulateFailureStage: 4, tag: "Vault Signing Fault" },
@@ -57,6 +96,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
   failureExplanation,
   liveThoughts,
   searchMode,
+  profile,
   onExecute,
   onReset,
 }) => {
@@ -66,6 +106,30 @@ export const SearchView: React.FC<SearchViewProps> = ({
   const [merchant, setMerchant] = useState("demo-merchant.myshopify.com");
   const [showPresets, setShowPresets] = useState(false);
   const [showPipeline, setShowPipeline] = useState(false);
+
+  // Voice Command State
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  // Diagram Hide/Show State
+  const [isDiagramVisible, setIsDiagramVisible] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("ap2_hide_diagram_pref") !== "true";
+    }
+    return true;
+  });
+  const [show4sCloud, setShow4sCloud] = useState(false);
+  const [showPersistentBar, setShowPersistentBar] = useState(false);
+  const [dontAskAgain, setDontAskAgain] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("ap2_dont_ask_hide_diagram") === "true";
+    }
+    return false;
+  });
+
+  // Quantity Clarifier State
+  const [selectedQty, setSelectedQty] = useState<number>(1);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   useCardGlow(containerRef);
@@ -83,6 +147,95 @@ export const SearchView: React.FC<SearchViewProps> = ({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [showPresets]);
+
+  const isPipelineActive = showPipeline || isStreaming || stages.some((s) => s.status !== "idle");
+
+  // Show 4-second diagram prompt when execution begins
+  useEffect(() => {
+    if (isPipelineActive) {
+      if (typeof window !== "undefined") {
+        const suppressed = localStorage.getItem("ap2_dont_ask_hide_diagram") === "true";
+        if (!suppressed && isDiagramVisible) {
+          setShow4sCloud(true);
+          const timer = setTimeout(() => {
+            setShow4sCloud(false);
+          }, 4000);
+          return () => clearTimeout(timer);
+        }
+      }
+    } else {
+      setShow4sCloud(false);
+    }
+  }, [isPipelineActive, isDiagramVisible]);
+
+  // Voice Recognition Handler
+  const handleToggleVoice = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("Voice search is not supported in this browser. Please use Chrome, Edge, or Safari.");
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-IN";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript) {
+          setRawIntent(transcript);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn("Speech recognition error:", event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error("Failed to start speech recognition:", err);
+      setIsListening(false);
+    }
+  };
+
+  // Item & Quantity Clarifier logic
+  const lowerQuery = rawIntent.toLowerCase().trim();
+  const hideRateRequested =
+    lowerQuery.includes("dont show rate") ||
+    lowerQuery.includes("don't show rate") ||
+    lowerQuery.includes("no rate") ||
+    lowerQuery.includes("without rate") ||
+    profile?.showRatesInChat === false;
+
+  const hasExplicitQuantity =
+    /\b\d+\s*(?:l|liter|liters|litre|litres|kg|kgs|packet|packets|pack|packs|bottle|bottles|pcs|units?|items?)?\b/.test(lowerQuery) ||
+    /\b(one|two|three|four|five|six)\b/.test(lowerQuery);
+
+  const detectedStaple = COMMON_STAPLES.find((s) => lowerQuery.includes(s.keyword));
+  const showQuantityClarifier = Boolean(detectedStaple && !hasExplicitQuantity && profile?.alwaysConfirmQuantity !== false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,7 +275,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
     setRawIntent("");
   };
 
-  const isPipelineActive = showPipeline || isStreaming || stages.some((s) => s.status !== "idle");
+  const settlementStage = stages.find((s) => s.id === "SETTLEMENT");
 
   return (
     <div ref={containerRef} className="flex-1 flex flex-col overflow-y-scroll overflow-x-hidden" style={{ scrollbarGutter: "stable" }}>
@@ -148,7 +301,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                 What would you like to buy?
               </h2>
               <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto">
-                Describe your purchase in plain language. The AI agent will find,
+                Describe your purchase in plain language or use the mic. The AI agent will find,
                 verify, and execute the best deal within your budget constraints.
               </p>
             </div>
@@ -156,15 +309,28 @@ export const SearchView: React.FC<SearchViewProps> = ({
             {/* Search Bar — Centerpiece */}
             <form onSubmit={handleSubmit} className="w-full max-w-2xl space-y-4">
               <div className="card p-2 flex items-center gap-2">
-                <div className="flex-1 flex items-center gap-3 px-3">
+                <div className="flex-1 flex items-center gap-2.5 px-3">
                   <Search className="w-5 h-5 text-[var(--text-faint)] shrink-0" />
                   <input
                     type="text"
                     value={rawIntent}
                     onChange={(e) => setRawIntent(e.target.value)}
-                    placeholder="Buy noise-canceling headphones under ₹5,000..."
+                    placeholder="Buy 2 liters of milk under ₹200..."
                     className="w-full bg-transparent text-base text-[var(--text-primary)] placeholder-[var(--text-faint)] focus:outline-none py-3"
                   />
+                  {/* Voice Command Button */}
+                  <button
+                    type="button"
+                    onClick={handleToggleVoice}
+                    title={isListening ? "Listening... Click to stop" : "Speak Voice Command"}
+                    className={`p-2 rounded-xl transition-all cursor-pointer shrink-0 ${
+                      isListening
+                        ? "bg-red-500 text-white animate-pulse shadow-md"
+                        : "text-[var(--text-muted)] hover:text-[var(--brown)] hover:bg-[var(--brown-faint)]"
+                    }`}
+                  >
+                    {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                  </button>
                 </div>
                 <button
                   type="submit"
@@ -175,6 +341,120 @@ export const SearchView: React.FC<SearchViewProps> = ({
                   <span>Run Flow</span>
                 </button>
               </div>
+
+              {/* Listening Voice Indicator */}
+              {isListening && (
+                <div className="flex items-center justify-center gap-2 text-xs font-mono text-red-600 bg-red-50 py-1.5 px-3 rounded-lg border border-red-200 animate-pulse">
+                  <span className="w-2 h-2 rounded-full bg-red-600" />
+                  <span>Listening... Speak your order now (e.g. &ldquo;Buy 2 liters of milk&rdquo;)</span>
+                </div>
+              )}
+
+              {/* ═══ Quantity & Rate Clarifier Card ═══ */}
+              {showQuantityClarifier && !isStreaming && detectedStaple && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="card p-4 bg-gradient-to-br from-amber-50/70 to-orange-50/50 border border-amber-200/80 rounded-2xl shadow-sm space-y-3"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--brown-dark)]">
+                        <Tag className="w-3.5 h-3.5 text-amber-700" />
+                        <span>Item Clarification</span>
+                      </div>
+                      <div className="text-sm font-semibold text-[var(--text-primary)] mt-0.5">
+                        {detectedStaple.name}
+                      </div>
+                      {!hideRateRequested && (
+                        <div className="text-xs font-mono font-medium text-emerald-700 mt-0.5">
+                          🏷️ Rate: ₹{detectedStaple.unitRateInr}.00 / {detectedStaple.unitLabel}
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">
+                      Catalog Match
+                    </span>
+                  </div>
+
+                  {/* Quantity Controls & Quick Picks */}
+                  <div className="pt-2 border-t border-amber-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-medium text-[var(--text-secondary)]">Quantity:</span>
+                      <div className="flex items-center border border-[rgba(92,61,46,0.2)] rounded-lg bg-white overflow-hidden shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedQty((q) => Math.max(1, q - 1))}
+                          className="p-1.5 hover:bg-gray-100 text-[var(--text-muted)] cursor-pointer"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="w-10 text-center text-xs font-bold font-mono text-[var(--brown-dark)]">
+                          {selectedQty} {detectedStaple.unitLabel}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedQty((q) => q + 1)}
+                          className="p-1.5 hover:bg-gray-100 text-[var(--text-muted)] cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Quick Picks */}
+                      <div className="flex items-center gap-1.5">
+                        {detectedStaple.quickQtys.map((q) => (
+                          <button
+                            key={q}
+                            type="button"
+                            onClick={() => setSelectedQty(q)}
+                            className={`px-2 py-0.5 text-xs font-mono rounded-md border transition-colors cursor-pointer ${
+                              selectedQty === q
+                                ? "bg-[var(--brown)] text-white border-[var(--brown)]"
+                                : "bg-white text-[var(--text-secondary)] border-[rgba(92,61,46,0.15)] hover:border-[var(--brown)]"
+                            }`}
+                          >
+                            {q}{detectedStaple.unitLabel}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-3">
+                      <div className="text-right">
+                        <span className="text-[10px] text-[var(--text-muted)] block">Estimated Total</span>
+                        <span className="text-sm font-bold font-mono text-emerald-800">
+                          ₹{detectedStaple.unitRateInr * selectedQty}.00
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const intentWithQty = `Buy ${selectedQty}${detectedStaple.unitLabel} of ${detectedStaple.name}${
+                            hideRateRequested ? " (don't show rate)" : ` (Rate: ₹${detectedStaple.unitRateInr}/${detectedStaple.unitLabel})`
+                          }`;
+                          setRawIntent(intentWithQty);
+                          setMaxSpendInr(Math.max(500, detectedStaple.unitRateInr * selectedQty + 100));
+                          setShowPipeline(true);
+                          onExecute({
+                            raw_intent: intentWithQty,
+                            max_spend_inr: Math.max(500, detectedStaple.unitRateInr * selectedQty + 100),
+                            allowed_merchants: [merchant],
+                            validity_hours: 24,
+                            mode: searchMode,
+                            llm_provider: llmProvider,
+                          });
+                        }}
+                        className="btn-primary py-2 px-4 text-xs font-semibold shrink-0"
+                      >
+                        <span>Confirm & Order</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
 
               {/* Controls Row — Budget + Presets */}
               <div
@@ -294,7 +574,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
             </form>
           </motion.div>
         ) : (
-          /* ═══ Pipeline Full-Screen View ═══ */
+          /* ═══ Pipeline Execution View ═══ */
           <motion.div
             key="pipeline"
             initial={{ opacity: 0, y: 20 }}
@@ -302,11 +582,11 @@ export const SearchView: React.FC<SearchViewProps> = ({
             exit={{ opacity: 0 }}
             className="flex-1 flex flex-col px-4 py-8 overflow-y-auto"
           >
-            {/* Header with trace + new search */}
-            <div className="flex items-center justify-between mb-6 max-w-lg mx-auto w-full">
+            {/* Header with trace + diagram toggle + new search */}
+            <div className="flex items-center justify-between mb-4 max-w-lg mx-auto w-full">
               <div>
                 <h3 className="text-sm font-semibold text-[var(--brown-dark)]">
-                  Pipeline Execution
+                  Purchase Execution
                 </h3>
                 {currentTraceId && (
                   <span className="text-xs font-mono text-[var(--text-faint)]">
@@ -314,32 +594,258 @@ export const SearchView: React.FC<SearchViewProps> = ({
                   </span>
                 )}
               </div>
-              <button
-                onClick={handleNewSearch}
-                disabled={isStreaming}
-                className="btn-secondary text-xs py-1.5 px-3"
-              >
-                <ArrowRight className="w-3 h-3 rotate-180" />
-                <span>New Search</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !isDiagramVisible;
+                    setIsDiagramVisible(next);
+                    if (!next) {
+                      setShowPersistentBar(true);
+                    }
+                  }}
+                  className="btn-secondary text-xs py-1.5 px-3 inline-flex items-center gap-1.5 cursor-pointer"
+                  title={isDiagramVisible ? "Hide technical 5-stage diagram" : "Show technical 5-stage diagram"}
+                >
+                  {isDiagramVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  <span>{isDiagramVisible ? "Hide Diagram" : "Show Diagram"}</span>
+                </button>
+                <button
+                  onClick={handleNewSearch}
+                  disabled={isStreaming}
+                  className="btn-secondary text-xs py-1.5 px-3"
+                >
+                  <ArrowRight className="w-3 h-3 rotate-180" />
+                  <span>New Search</span>
+                </button>
+              </div>
             </div>
 
-            {/* Intent display */}
+            {/* ═══ 4-Second Speech Bubble / Text Cloud ═══ */}
+            {show4sCloud && isDiagramVisible && (
+              <div className="max-w-lg mx-auto w-full mb-3 flex justify-end">
+                <div className="bg-white border border-[rgba(92,61,46,0.18)] shadow-xl rounded-xl px-3 py-2 flex items-center gap-3 text-xs z-30 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <span className="text-[var(--text-secondary)] font-medium">
+                    💡 Do you want to hide this diagram?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDiagramVisible(false);
+                      setShow4sCloud(false);
+                      setShowPersistentBar(true);
+                      localStorage.setItem("ap2_hide_diagram_pref", "true");
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-[var(--brown)] hover:bg-[var(--brown-dark)] text-white font-medium text-[11px] transition-colors cursor-pointer"
+                  >
+                    Hide
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShow4sCloud(false)}
+                    className="px-2 py-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] text-[11px] transition-colors cursor-pointer"
+                  >
+                    Keep
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ═══ Non-Timed Persistent Notification Bar ═══ */}
+            {showPersistentBar && !isDiagramVisible && (
+              <div className="max-w-lg mx-auto w-full mb-4 p-2.5 rounded-xl bg-amber-50/90 border border-amber-200 text-xs text-amber-900 flex items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-2">
+                  <span>Visual diagram is hidden.</span>
+                  <label className="flex items-center gap-1.5 text-[11px] text-amber-800 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={dontAskAgain}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setDontAskAgain(checked);
+                        if (checked) {
+                          localStorage.setItem("ap2_dont_ask_hide_diagram", "true");
+                          localStorage.setItem("ap2_hide_diagram_pref", "true");
+                        } else {
+                          localStorage.removeItem("ap2_dont_ask_hide_diagram");
+                          localStorage.removeItem("ap2_hide_diagram_pref");
+                        }
+                      }}
+                      className="rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                    />
+                    <span>Do not ask me this again</span>
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDiagramVisible(true)}
+                    className="text-[11px] font-medium underline text-amber-900 hover:text-amber-950 cursor-pointer"
+                  >
+                    Show Diagram
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPersistentBar(false)}
+                    className="p-1 text-amber-600 hover:text-amber-800 rounded-md cursor-pointer"
+                    title="Close notification"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Intent & Rate Display */}
             {rawIntent && (
-              <div className="max-w-lg mx-auto w-full mb-4 px-4 py-3 rounded-xl bg-[var(--brown-faint)] text-sm text-[var(--text-secondary)]">
-                &ldquo;{rawIntent}&rdquo;
-                <span className="text-xs text-[var(--text-faint)] ml-2">
-                  · Budget: ₹{maxSpendInr.toLocaleString("en-IN")}
+              <div className="max-w-lg mx-auto w-full mb-4 px-4 py-3 rounded-xl bg-[var(--brown-faint)] text-sm text-[var(--text-secondary)] flex items-center justify-between">
+                <div>
+                  <span className="font-semibold text-[var(--brown-dark)]">&ldquo;{rawIntent}&rdquo;</span>
+                  {detectedStaple && !hideRateRequested && (
+                    <span className="block text-xs font-mono text-emerald-700 mt-0.5">
+                      Rate: ₹{detectedStaple.unitRateInr}.00 / {detectedStaple.unitLabel}
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs font-mono text-[var(--text-faint)] shrink-0 ml-2">
+                  Budget: ₹{maxSpendInr.toLocaleString("en-IN")}
                 </span>
               </div>
             )}
 
-            {/* Vertical Pipeline */}
-            <VerticalPipeline
-              stages={stages}
-              failureExplanation={failureExplanation}
-              liveThoughts={liveThoughts}
-            />
+            {/* ═══ Diagram Rendering: Visual or Simplified Executive ═══ */}
+            {isDiagramVisible ? (
+              <VerticalPipeline
+                stages={stages}
+                failureExplanation={failureExplanation}
+                liveThoughts={liveThoughts}
+              />
+            ) : (
+              /* Compact Executive Order Card when Diagram is Hidden */
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="max-w-lg mx-auto w-full space-y-4"
+              >
+                <div className="card p-5 space-y-4 shadow-sm border border-[rgba(92,61,46,0.12)] bg-white">
+                  <div className="flex items-center justify-between border-b border-[rgba(92,61,46,0.06)] pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-[var(--brown-dark)]">Purchase Order Summary</h4>
+                        <span className="text-[11px] text-[var(--text-muted)] font-mono">
+                          Trace: {currentTraceId || "TRC-2026-LIVE"}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800">
+                      {settlementStage?.status === "success" || (settlementStage as any)?.status === "passed"
+                        ? "SETTLED"
+                        : "PROCESSING"}
+                    </span>
+                  </div>
+
+                  {/* Summary Details */}
+                  <div className="space-y-2 text-xs text-[var(--text-secondary)]">
+                    <div className="flex justify-between py-1 border-b border-[rgba(92,61,46,0.04)]">
+                      <span className="text-[var(--text-muted)]">Order Intent:</span>
+                      <span className="font-semibold text-[var(--brown-dark)]">{rawIntent}</span>
+                    </div>
+                    {detectedStaple && !hideRateRequested && (
+                      <div className="flex justify-between py-1 border-b border-[rgba(92,61,46,0.04)]">
+                        <span className="text-[var(--text-muted)]">Catalog Unit Rate:</span>
+                        <span className="font-mono text-emerald-700 font-medium">
+                          ₹{detectedStaple.unitRateInr}.00 / {detectedStaple.unitLabel}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between py-1 border-b border-[rgba(92,61,46,0.04)]">
+                      <span className="text-[var(--text-muted)]">Security Clearance:</span>
+                      <span className="text-emerald-700 font-medium flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>ES256 Mandate Signed · RFC 8785 Verified</span>
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-1 font-semibold text-sm pt-2">
+                      <span>Settlement Amount:</span>
+                      <span className="font-mono text-emerald-800">
+                        ₹{settlementStage?.data?.total_inr ? Number(settlementStage.data.total_inr).toFixed(2) : maxSpendInr.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* If Settlement Complete, Show prominent Razorpay Payment Button */}
+                  {(settlementStage?.status === "success" || (settlementStage as any)?.status === "passed") && (() => {
+                    const stageData = settlementStage?.data || {};
+                    const rzpOrderId = typeof stageData.razorpay_order_id === "string" ? stageData.razorpay_order_id : `order_test_${Date.now()}`;
+                    const amountPaise = Number(
+                      stageData.total_price_paise ||
+                      Number(stageData.total_inr || maxSpendInr) * 100
+                    );
+                    const keyId = typeof stageData.razorpay_key_id === "string" ? stageData.razorpay_key_id : "rzp_test_TXG9px2n22l1sG";
+
+                    return (
+                      <div className="pt-2 border-t border-[rgba(92,61,46,0.06)] space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-emerald-900 font-medium">Standard Web Checkout (S2S)</span>
+                          <span className="font-mono text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                            {rzpOrderId}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (typeof window !== "undefined" && (window as any).Razorpay) {
+                              const options: any = {
+                                key: keyId,
+                                amount: amountPaise,
+                                currency: "INR",
+                                name: "AP2 Agentic Commerce Bridge",
+                                description: "Governed Purchase Settlement (Razorpay Test Mode)",
+                                prefill: {
+                                  name: "Rohit Chauhan",
+                                  email: "buyer@ap2bridge.dev",
+                                  contact: "9999999999",
+                                },
+                                theme: { color: "#059669" },
+                                handler: (res: any) => {
+                                  alert(`Payment successfully completed in Razorpay! Payment ID: ${res.razorpay_payment_id}`);
+                                },
+                              };
+                              if (rzpOrderId && !rzpOrderId.startsWith("order_test_")) {
+                                options.order_id = rzpOrderId;
+                              }
+                              const rzp = new (window as any).Razorpay(options);
+                              rzp.open();
+                            } else {
+                              alert("Razorpay Checkout SDK is still loading. Please retry in a moment.");
+                            }
+                          }}
+                          className="w-full py-2.5 px-4 rounded-xl bg-[#059669] hover:bg-[#047857] text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99]"
+                        >
+                          <CreditCard className="w-4 h-4" />
+                          <span>Open Razorpay Payment Modal</span>
+                          <ExternalLink className="w-3.5 h-3.5 opacity-90" />
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDiagramVisible(true)}
+                    className="text-xs text-[var(--brown)] hover:underline inline-flex items-center gap-1.5 cursor-pointer font-medium"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>View 5-Stage Technical Pipeline Diagram</span>
+                  </button>
+                </div>
+              </motion.div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

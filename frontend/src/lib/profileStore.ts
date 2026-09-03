@@ -19,6 +19,8 @@ export interface UserProfileState {
   favoriteBrands: string[];
   usualGroceryList: GroceryStapleItem[];
   allowPurchaseTracking: boolean;
+  showRatesInChat: boolean;
+  alwaysConfirmQuantity: boolean;
 }
 
 export const DEFAULT_USER_PROFILE: UserProfileState = {
@@ -38,6 +40,8 @@ export const DEFAULT_USER_PROFILE: UserProfileState = {
     { id: "6", name: "Farm Fresh Eggs (Pack of 6)", preferredBrand: "Farm Fresh White Eggs", category: "groceries" },
   ],
   allowPurchaseTracking: true,
+  showRatesInChat: true,
+  alwaysConfirmQuantity: true,
 };
 
 const STORAGE_KEY = "ap2_buyer_profile_v1";

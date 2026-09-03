@@ -354,6 +354,7 @@ function AppContent() {
             failureExplanation={failureExplanation}
             liveThoughts={liveThoughts}
             searchMode={searchMode}
+            profile={profile}
             onExecute={handleExecute}
             onReset={handleReset}
           />

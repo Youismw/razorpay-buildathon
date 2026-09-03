@@ -376,6 +376,56 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             />
           </button>
         </div>
+
+        {/* Display Rates & Pricing in Chat / Search */}
+        <div className="pt-2 border-t border-[rgba(92,61,46,0.06)] flex items-center justify-between">
+          <div>
+            <span className="text-xs font-medium text-[var(--text-primary)] block">
+              Show Product Rates & Unit Pricing
+            </span>
+            <span className="text-[11px] text-[var(--text-muted)]">
+              Display per-unit rates (e.g. ₹72/L) in search and deliberation unless &ldquo;don&apos;t show rate&rdquo; is requested
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFormData({ ...formData, showRatesInChat: !formData.showRatesInChat })}
+            className={`w-11 h-6 rounded-full transition-colors relative flex items-center px-0.5 ${
+              formData.showRatesInChat ? "bg-[var(--brown)]" : "bg-[var(--text-faint)]"
+            }`}
+          >
+            <span
+              className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                formData.showRatesInChat ? "translate-x-5" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Quantity Confirmation for Unspecified Items */}
+        <div className="pt-2 border-t border-[rgba(92,61,46,0.06)] flex items-center justify-between">
+          <div>
+            <span className="text-xs font-medium text-[var(--text-primary)] block">
+              Always Ask Quantity for Staples
+            </span>
+            <span className="text-[11px] text-[var(--text-muted)]">
+              Prompt for amount/volume (e.g. 1L, 2L, 5L) when unspecified in commands like &ldquo;buy milk&rdquo;
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFormData({ ...formData, alwaysConfirmQuantity: !formData.alwaysConfirmQuantity })}
+            className={`w-11 h-6 rounded-full transition-colors relative flex items-center px-0.5 ${
+              formData.alwaysConfirmQuantity ? "bg-[var(--brown)]" : "bg-[var(--text-faint)]"
+            }`}
+          >
+            <span
+              className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                formData.alwaysConfirmQuantity ? "translate-x-5" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </div>
       </div>
 
       {/* ═══ Card 4: Usual Grocery List (Staple Items) ═══ */}

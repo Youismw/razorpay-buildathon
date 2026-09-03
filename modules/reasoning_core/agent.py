@@ -427,9 +427,43 @@ def _generate_mock_proposal(constraints: CompiledConstraints, catalog: Dict[str,
             "is_ambiguous": is_ambiguous,
         }, thought_steps
 
-    chosen_inr = best_item["price_paise"] / 100.0
+    import re
+    parsed_qty = 1
+    word_to_num = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "ten": 10, "dozen": 12}
+    for w, num in word_to_num.items():
+        if re.search(rf"\b(?:buy|order|purchase|get|need)\s+{w}\b", raw_lower) or re.search(rf"\b{w}\s+(?:l|liter|liters|kg|packet|units?|items?)\b", raw_lower):
+            parsed_qty = num
+            break
+
+    # Look for explicit quantity: preceded by verb (e.g. "buy 2") or followed by unit (e.g. "2L", "2 packets", "2x")
+    qty_patterns = [
+        r'\b(?:buy|order|purchase|get|need|want|qty|quantity)\s+(\d+)\b',
+        r'\b(\d+)\s*(?:l|liter|liters|litre|litres|kg|kgs|packet|packets|pack|packs|bottle|bottles|pcs|pieces|units?|items?|cartons?|boxes|box|x)\b',
+    ]
+    for pat in qty_patterns:
+        m = re.search(pat, raw_lower)
+        if m:
+            try:
+                val = int(m.group(1))
+                if 1 <= val <= 100:
+                    parsed_qty = val
+                    break
+            except ValueError:
+                pass
+
+    unit_paise = best_item["price_paise"]
+    total_paise = unit_paise * parsed_qty
+    unit_inr = unit_paise / 100.0
+    total_inr = total_paise / 100.0
+
+    hide_rate = any(phrase in raw_lower for phrase in ["dont show rate", "don't show rate", "hide rate", "no rate", "without rate"])
+    rate_desc = f"Rate: ₹{unit_inr:.2f}/unit" if not hide_rate else ""
+    if parsed_qty > 1 and not hide_rate:
+        rate_desc += f" (Total for {parsed_qty} units: ₹{total_inr:.2f})"
+
     thought_steps.append(
-        f"Final Decision: Propose candidate '{best_item['name']}' from '{best_merchant}' for ₹{chosen_inr:.2f}. "
+        f"Final Decision: Propose candidate '{best_item['name']}' from '{best_merchant}'. "
+        f"{rate_desc} "
         f"Emitting canonical ProposalObject to Guardrail Shell for cryptographic policy verification."
     )
 
@@ -441,16 +475,16 @@ def _generate_mock_proposal(constraints: CompiledConstraints, catalog: Dict[str,
             "product_id": best_item["product_id"],
             "product_name": best_item["name"],
             "merchant_id": best_merchant,
-            "offer_price_paise": best_item["price_paise"],
-            "quantity": 1,
+            "offer_price_paise": unit_paise,
+            "quantity": parsed_qty,
             "currency": "INR",
             "category": best_item.get("category", "general"),
         }],
-        "total_price_paise": best_item["price_paise"],
+        "total_price_paise": total_paise,
         "reasoning_summary": (
-            f"Selected '{best_item['name']}' at ₹{chosen_inr:.2f} ({best_item['price_paise']} paise) "
+            f"Selected '{best_item['name']}' {rate_desc} "
             f"from {best_merchant}, strictly adhering to ₹{max_inr:.2f} budget constraint."
-        ),
+        ).strip(),
     }
     return proposal, thought_steps
 
