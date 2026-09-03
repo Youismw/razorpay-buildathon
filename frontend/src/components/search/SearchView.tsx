@@ -25,6 +25,7 @@ import { BuyRequest, PipelineStageState } from "@/lib/types";
 import { VerticalPipeline } from "@/components/pipeline/VerticalPipeline";
 import { useCardGlow } from "@/hooks/useCardGlow";
 import { UserProfileState } from "@/lib/profileStore";
+import { BACKEND_URL } from "@/lib/api";
 
 interface SearchViewProps {
   stages: PipelineStageState[];
@@ -129,6 +130,71 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
   // Quantity Clarifier State
   const [selectedQty, setSelectedQty] = useState<number>(1);
+  const [liveStaples, setLiveStaples] = useState<DetectedStaple[]>(COMMON_STAPLES);
+
+  // Synchronize dynamic catalog items from server in real time
+  useEffect(() => {
+    let isMounted = true;
+    const fetchLiveStaples = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/seller/catalog`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.items && Array.isArray(data.items) && isMounted) {
+          const dynamicStaples: DetectedStaple[] = data.items.map((it: any) => {
+            const nameLower = (it.name || it.title || "").toLowerCase();
+            let kw = (it.id || "").toLowerCase().replace("prod-", "");
+            if (nameLower.includes("milk")) kw = "milk";
+            else if (nameLower.includes("coffee")) kw = "coffee";
+            else if (nameLower.includes("bread")) kw = "bread";
+            else if (nameLower.includes("butter")) kw = "butter";
+            else if (nameLower.includes("egg")) kw = "egg";
+            else if (nameLower.includes("atta") || nameLower.includes("flour")) kw = "atta";
+            else if (nameLower.includes("headphone") || nameLower.includes("earphone")) kw = "headphone";
+            else if (nameLower.includes("earbud")) kw = "earbud";
+            else if (nameLower.includes("watch")) kw = "watch";
+            else if (nameLower.includes("mouse")) kw = "mouse";
+            else if (nameLower.includes("keyboard")) kw = "keyboard";
+            else if (nameLower.includes("speaker")) kw = "speaker";
+            else kw = nameLower.split(" ")[0] || kw;
+
+            let unitLabel = "Unit";
+            if (nameLower.includes("(1l)") || nameLower.includes("liter") || nameLower.includes("1l")) unitLabel = "L";
+            else if (nameLower.includes("400g") || nameLower.includes("bread")) unitLabel = "Loaf";
+            else if (nameLower.includes("jar") || nameLower.includes("coffee")) unitLabel = "Jar";
+            else if (nameLower.includes("pack") || nameLower.includes("butter") || nameLower.includes("egg")) unitLabel = "Pack";
+            else if (nameLower.includes("5kg") || nameLower.includes("atta")) unitLabel = "Bag";
+
+            return {
+              keyword: kw,
+              name: it.name || it.title,
+              unitRateInr: Number(it.sellingPrice || it.sellingPriceInr || 100),
+              unitLabel,
+              defaultQty: 1,
+              quickQtys: unitLabel === "L" ? [1, 2, 3, 5] : [1, 2, 3],
+            };
+          });
+
+          const merged = [...dynamicStaples];
+          for (const cs of COMMON_STAPLES) {
+            if (!merged.some((m) => m.keyword === cs.keyword)) {
+              merged.push(cs);
+            }
+          }
+          setLiveStaples(merged);
+        }
+      } catch {
+        // Fallback silently
+      }
+    };
+
+    fetchLiveStaples();
+    const interval = setInterval(fetchLiveStaples, 2500);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -234,7 +300,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
     /\b\d+\s*(?:l|liter|liters|litre|litres|kg|kgs|packet|packets|pack|packs|bottle|bottles|pcs|units?|items?)?\b/.test(lowerQuery) ||
     /\b(one|two|three|four|five|six)\b/.test(lowerQuery);
 
-  const detectedStaple = COMMON_STAPLES.find((s) => lowerQuery.includes(s.keyword));
+  const detectedStaple = liveStaples.find((s) => lowerQuery.includes(s.keyword));
   const showQuantityClarifier = Boolean(detectedStaple && !hasExplicitQuantity && profile?.alwaysConfirmQuantity !== false);
 
   const handleSubmit = (e: React.FormEvent) => {

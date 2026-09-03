@@ -36,7 +36,10 @@ from modules.guardrail_shell.grounding_oracle import (
     DEMO_MERCHANT_CATALOG,
     add_or_update_product,
     decrement_inventory,
+    save_catalog_to_disk,
 )
+import time
+CATALOG_VERSION: float = time.time()
 from modules.guardrail_shell.confidence_gate import compute_confidence
 from modules.mandate_vault.crypto import sign_canonical_payload, _key_manager, verify_jws_signature
 from modules.ledger.audit_exporter import write_transaction_audit_files
@@ -383,7 +386,9 @@ def add_product_to_catalog(req: AddProductRequest):
             "supplier_cost_paise": cost_paise,
         },
     )
-    return {"status": "SUCCESS", "product_id": pid, "product": created_prod}
+    global CATALOG_VERSION
+    CATALOG_VERSION = time.time()
+    return {"status": "SUCCESS", "product_id": pid, "product": created_prod, "version": CATALOG_VERSION}
 
 
 class UpdateProductRequest(BaseModel):
@@ -393,9 +398,16 @@ class UpdateProductRequest(BaseModel):
     price_inr: Optional[float] = None
 
 
+@app.get("/api/catalog/version")
+def get_catalog_version():
+    """Return latest timestamp version of the global catalog for instant client cache validation."""
+    return {"version": CATALOG_VERSION}
+
+
 @app.post("/api/seller/catalog/update")
 def update_product_in_catalog(req: UpdateProductRequest):
     """Update stock or price of an existing product in the catalog."""
+    global CATALOG_VERSION
     m_data = DEMO_MERCHANT_CATALOG.get(req.merchant_id, {})
     prods = m_data.get("products", {})
     if req.product_id in prods:
@@ -405,7 +417,9 @@ def update_product_in_catalog(req: UpdateProductRequest):
             p["in_stock"] = req.stock > 0
         if req.price_inr is not None:
             p["price_paise"] = int(req.price_inr * 100)
-        return {"status": "SUCCESS", "product_id": req.product_id, "product": p}
+        save_catalog_to_disk()
+        CATALOG_VERSION = time.time()
+        return {"status": "SUCCESS", "product_id": req.product_id, "product": p, "version": CATALOG_VERSION}
     return {"status": "SUCCESS", "message": "Updated"}
 
 
@@ -419,19 +433,28 @@ def get_seller_catalog(merchant_id: str = "demo-merchant.myshopify.com"):
         price_inr = p["price_paise"] / 100.0
         cost_inr = p.get("supplier_cost_paise", int(p["price_paise"] * 0.72)) / 100.0
         margin_pct = round(((price_inr - cost_inr) / price_inr) * 100.0, 1) if price_inr > 0 else 25.0
+        stock_cnt = p.get("stock", 25 if p.get("in_stock", True) else 0)
         items.append({
             "id": pid,
+            "name": p["name"],
             "title": p["name"],
+            "category": p.get("category", "general"),
+            "stock": stock_cnt,
+            "inventoryStock": stock_cnt,
+            "supplierCost": cost_inr,
             "supplierCostInr": cost_inr,
+            "sellingPrice": price_inr,
             "sellingPriceInr": price_inr,
             "marginPct": margin_pct,
-            "inventoryStock": p.get("stock", 25 if p.get("in_stock", True) else 0),
+            "inStock": p.get("in_stock", stock_cnt > 0),
+            "marketplaces": ["AP2 Gateway", "Amazon", "Flipkart"],
             "channels": ["AP2 Gateway", "Amazon", "Flipkart"],
-            "daysInInventory": 6,
+            "daysIdle": 5,
+            "daysInInventory": 5,
+            "discountPct": 0,
             "autoClearanceDiscountPct": 0,
-            "category": p.get("category", "general"),
         })
-    return {"items": items}
+    return {"items": items, "version": CATALOG_VERSION}
 
 
 @app.get("/api/seller/analytics")
@@ -1419,6 +1442,9 @@ def buy(req: BuyRequest):
             )
         )
 
+    global CATALOG_VERSION
+    CATALOG_VERSION = time.time()
+
     # Write per-transaction audit output files (.json and .md)
     paths = write_transaction_audit_files(
         trace_id=trace_id,
@@ -1722,6 +1748,9 @@ async def buy_stream(req: BuyRequest):
                         ai_deliberation_steps=ai_thought_steps,
                     )
                 )
+
+            global CATALOG_VERSION
+            CATALOG_VERSION = time.time()
 
             paths = write_transaction_audit_files(
                 trace_id=trace_id,

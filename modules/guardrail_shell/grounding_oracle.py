@@ -6,6 +6,8 @@ Thread 0 MVP: Mock implementation with a hardcoded demo merchant manifest.
 Production: Compares against injected UCP manifest with cryptographic hashes.
 """
 
+import os
+import json
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 from modules.guardrail_shell.schema_validator import ProposalItem
@@ -335,6 +337,37 @@ def verify_grounding(
     )
 
 
+CATALOG_FILE_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "global_catalog.json")
+
+
+def save_catalog_to_disk() -> None:
+    """Persist global catalog to disk so changes are permanent across all sessions."""
+    try:
+        os.makedirs(os.path.dirname(CATALOG_FILE_PATH), exist_ok=True)
+        with open(CATALOG_FILE_PATH, "w", encoding="utf-8") as f:
+            json.dump(DEMO_MERCHANT_CATALOG, f, indent=2)
+    except Exception as e:
+        print(f"[CATALOG PERSISTENCE] Warning: failed to save catalog: {e}")
+
+
+def load_catalog_from_disk() -> None:
+    """Load persisted catalog from disk on server startup."""
+    global DEMO_MERCHANT_CATALOG
+    try:
+        if os.path.exists(CATALOG_FILE_PATH):
+            with open(CATALOG_FILE_PATH, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+                if isinstance(saved, dict) and "demo-merchant.myshopify.com" in saved:
+                    DEMO_MERCHANT_CATALOG.clear()
+                    DEMO_MERCHANT_CATALOG.update(saved)
+    except Exception as e:
+        print(f"[CATALOG PERSISTENCE] Warning: failed to load catalog: {e}")
+
+
+# Initialize from disk if persistent file exists
+load_catalog_from_disk()
+
+
 def add_or_update_product(
     merchant_id: str,
     product_id: str,
@@ -356,6 +389,7 @@ def add_or_update_product(
         "stock": product_data.get("stock", 25),
         "supplier_cost_paise": product_data.get("supplier_cost_paise", int(product_data["price_paise"] * 0.75)),
     }
+    save_catalog_to_disk()
     return DEMO_MERCHANT_CATALOG[merchant_id]["products"][product_id]
 
 
@@ -379,6 +413,8 @@ def decrement_inventory(
     product["stock"] = new_stock
     if new_stock == 0:
         product["in_stock"] = False
+
+    save_catalog_to_disk()
 
     return {
         "status": "DECREMENTED",

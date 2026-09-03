@@ -4,6 +4,8 @@ Orchestrates AI Competitor Price Intelligence, Multi-Channel Listing,
 Autonomous Logistics Dispatch, Cryptographic Order Audit Logs, and AI Strategy Advisory.
 """
 
+import os
+import json
 import uuid
 import datetime
 import re
@@ -428,9 +430,42 @@ def generate_mock_seller_orders() -> List[SellerOrder]:
 LIVE_SELLER_ORDERS: List[SellerOrder] = generate_mock_seller_orders()
 
 
+ORDERS_FILE_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "global_orders.json")
+
+
+def save_orders_to_disk() -> None:
+    """Save live seller orders to persistent disk storage."""
+    try:
+        os.makedirs(os.path.dirname(ORDERS_FILE_PATH), exist_ok=True)
+        with open(ORDERS_FILE_PATH, "w", encoding="utf-8") as f:
+            json.dump([o.model_dump() for o in LIVE_SELLER_ORDERS], f, indent=2)
+    except Exception as e:
+        print(f"[ORDERS PERSISTENCE] Warning: failed to save orders: {e}")
+
+
+def load_orders_from_disk() -> None:
+    """Load saved seller orders from persistent disk storage."""
+    global LIVE_SELLER_ORDERS
+    try:
+        if os.path.exists(ORDERS_FILE_PATH):
+            with open(ORDERS_FILE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    loaded = [SellerOrder(**item) for item in data]
+                    LIVE_SELLER_ORDERS.clear()
+                    LIVE_SELLER_ORDERS.extend(loaded)
+    except Exception as e:
+        print(f"[ORDERS PERSISTENCE] Warning: failed to load orders: {e}")
+
+
+# Initialize from disk if persistent file exists
+load_orders_from_disk()
+
+
 def record_seller_order(order: SellerOrder) -> SellerOrder:
     """Record a newly settled buyer order into the merchant's live order ledger."""
     LIVE_SELLER_ORDERS.insert(0, order)
+    save_orders_to_disk()
     return order
 
 

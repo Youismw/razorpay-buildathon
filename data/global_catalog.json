@@ -1,0 +1,288 @@
+{
+  "demo-merchant.myshopify.com": {
+    "manifest_hash": "sha256:demo_manifest_v2_2026",
+    "products": {
+      "PROD-WH-CH520": {
+        "name": "Sony WH-CH520 Wireless Headphones",
+        "price_paise": 499900,
+        "category": "electronics",
+        "in_stock": true
+      },
+      "PROD-BUDS-XM5": {
+        "name": "Sony WF-1000XM5 Noise Canceling Earbuds",
+        "price_paise": 1999900,
+        "category": "electronics",
+        "in_stock": true
+      },
+      "PROD-WATCH-GT4": {
+        "name": "Huawei Watch GT 4 (46mm Amoled)",
+        "price_paise": 1699900,
+        "category": "electronics",
+        "in_stock": true
+      },
+      "PROD-KB-MECH": {
+        "name": "Keychron K2 Wireless Mechanical Keyboard",
+        "price_paise": 749900,
+        "category": "electronics",
+        "in_stock": true
+      },
+      "PROD-LOGI-MX3S": {
+        "name": "Logitech MX Master 3S Wireless Mouse",
+        "price_paise": 899500,
+        "category": "electronics",
+        "in_stock": true
+      },
+      "PROD-SPK-MINI3": {
+        "name": "Anker Soundcore Mini 3 Bluetooth Speaker",
+        "price_paise": 99900,
+        "category": "audio",
+        "in_stock": true
+      },
+      "PROD-AIR-350": {
+        "name": "JBL Tune 350BT On-Ear Wireless Headphones",
+        "price_paise": 299900,
+        "category": "audio",
+        "in_stock": true,
+        "stock": 18
+      },
+      "PROD-BOSE-QC45": {
+        "name": "Bose QuietComfort 45 Bluetooth Headphones",
+        "price_paise": 2499000,
+        "category": "audio",
+        "in_stock": true
+      },
+      "PROD-MARSHALL-EMB": {
+        "name": "Marshall Emberton II Portable Speaker",
+        "price_paise": 1499900,
+        "category": "audio",
+        "in_stock": true
+      },
+      "PROD-SNK-550": {
+        "name": "New Balance 550 Classic Sneakers (White/Brown)",
+        "price_paise": 1099900,
+        "category": "fashion",
+        "in_stock": true
+      },
+      "PROD-BAG-ROLL": {
+        "name": "Samsonite Rolltop Commuter Backpack 22L",
+        "price_paise": 399900,
+        "category": "fashion",
+        "in_stock": true
+      },
+      "PROD-SUN-AVIO": {
+        "name": "Ray-Ban Aviator Classic Gradient Sunglasses",
+        "price_paise": 1199000,
+        "category": "fashion",
+        "in_stock": true
+      },
+      "PROD-HOODIE-COSY": {
+        "name": "Heavyweight Organic Cotton Oversized Hoodie",
+        "price_paise": 249900,
+        "category": "fashion",
+        "in_stock": true
+      },
+      "PROD-WATCH-TIMEX": {
+        "name": "Timex Marlin Automatic Leather Watch",
+        "price_paise": 1449500,
+        "category": "fashion",
+        "in_stock": true
+      },
+      "PROD-COF-V60": {
+        "name": "Hario V60 Ceramic Pour Over Coffee Dripper Set",
+        "price_paise": 189900,
+        "category": "home",
+        "in_stock": true
+      },
+      "PROD-LAMP-LED": {
+        "name": "BenQ ScreenBar e-Reading Monitor Desk Lamp",
+        "price_paise": 899900,
+        "category": "home",
+        "in_stock": true
+      },
+      "PROD-AIR-PUR": {
+        "name": "Mi Smart Air Purifier 4 Lite (HEPA Filter)",
+        "price_paise": 849900,
+        "category": "home",
+        "in_stock": true
+      },
+      "PROD-KETTLE-GOOS": {
+        "name": "Fellow Stagg EKG Electric Gooseneck Kettle",
+        "price_paise": 1599900,
+        "category": "home",
+        "in_stock": true
+      },
+      "PROD-DIFFUSER-ARO": {
+        "name": "Muji Ultrasonic Aroma Diffuser (Large)",
+        "price_paise": 429000,
+        "category": "home",
+        "in_stock": true
+      },
+      "PROD-BOOK-DDIA": {
+        "name": "Designing Data-Intensive Applications by Martin Kleppmann",
+        "price_paise": 349900,
+        "category": "books",
+        "in_stock": true
+      },
+      "PROD-BOOK-RUST": {
+        "name": "The Rust Programming Language by Steve Klabnik",
+        "price_paise": 289900,
+        "category": "books",
+        "in_stock": true
+      },
+      "PROD-BOOK-CLEAN": {
+        "name": "Clean Architecture by Robert C. Martin",
+        "price_paise": 199900,
+        "category": "books",
+        "in_stock": true
+      },
+      "PROD-BOOK-PSYCH": {
+        "name": "The Psychology of Money by Morgan Housel",
+        "price_paise": 39900,
+        "category": "books",
+        "in_stock": true
+      },
+      "PROD-MAT-YOGA": {
+        "name": "Manduka PRO 6mm High-Density Yoga Mat",
+        "price_paise": 799900,
+        "category": "fitness",
+        "in_stock": true
+      },
+      "PROD-BAND-RES": {
+        "name": "Theraband Professional Resistance Bands Set",
+        "price_paise": 129900,
+        "category": "fitness",
+        "in_stock": true
+      },
+      "PROD-MILK-AMUL": {
+        "name": "Amul Taaza Homogenised Toned Milk (1L)",
+        "price_paise": 7200,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 18
+      },
+      "PROD-MILK-CD": {
+        "name": "Country Delight Pure Cow Milk (1L)",
+        "price_paise": 8500,
+        "category": "groceries",
+        "in_stock": true
+      },
+      "PROD-MILK-NANDINI": {
+        "name": "Nandini Special Pasteurized Milk (1L)",
+        "price_paise": 5600,
+        "category": "groceries",
+        "in_stock": false
+      },
+      "PROD-MILK-EPI": {
+        "name": "Epigamia Almond Milk Unsweetened (1L)",
+        "price_paise": 24000,
+        "category": "groceries",
+        "in_stock": true
+      },
+      "PROD-COF-NES": {
+        "name": "Nescaf\u00e9 Classic Instant Coffee Glass Jar (100g)",
+        "price_paise": 36000,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 18
+      },
+      "PROD-COF-BT": {
+        "name": "Blue Tokai Attikan Estate Dark Roast Coffee (250g)",
+        "price_paise": 47000,
+        "category": "groceries",
+        "in_stock": true
+      },
+      "PROD-ATTA-AASH": {
+        "name": "Aashirvaad Superior MP Shudh Chakki Atta (5kg)",
+        "price_paise": 27500,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 18
+      },
+      "PROD-ATTA-FORT": {
+        "name": "Fortune Chakki Fresh Whole Wheat Atta (5kg)",
+        "price_paise": 24500,
+        "category": "groceries",
+        "in_stock": true
+      },
+      "PROD-BRD-BRIT": {
+        "name": "Britannia 100% Whole Wheat Bread (400g)",
+        "price_paise": 5500,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 18
+      },
+      "PROD-BRD-TBD": {
+        "name": "The Baker's Dozen Country Sourdough Loaf (350g)",
+        "price_paise": 14000,
+        "category": "groceries",
+        "in_stock": true
+      },
+      "PROD-BTR-AMUL": {
+        "name": "Amul Pasteurized Salted Table Butter (500g)",
+        "price_paise": 28500,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 18
+      },
+      "PROD-BTR-PRES": {
+        "name": "Pr\u00e9sident Salted Gourmet Butter (200g)",
+        "price_paise": 32000,
+        "category": "groceries",
+        "in_stock": true
+      },
+      "PROD-EGG-EGGOZ": {
+        "name": "Eggoz Nutra-Plus Farm Fresh Herbal Eggs (Box of 6)",
+        "price_paise": 9500,
+        "category": "groceries",
+        "in_stock": true
+      },
+      "PROD-EGG-REG": {
+        "name": "Farm Fresh White Eggs (Pack of 6)",
+        "price_paise": 4800,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 18
+      },
+      "PROD-SONY-WH-CH520-WIRELE": {
+        "name": "Sony WH-CH520 Wireless Headphones",
+        "price_paise": 460800,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 42,
+        "supplier_cost_paise": 360000
+      },
+      "PROD-AMUL-TAAZA-HOMOGENIS": {
+        "name": "Amul Taaza Homogenised Toned Milk (1L)",
+        "price_paise": 6925,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 120,
+        "supplier_cost_paise": 5800
+      },
+      "PROD-BLUE-TOKAI-ATTIKAN-D": {
+        "name": "Blue Tokai Attikan Dark Roast (250g)",
+        "price_paise": 42834,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 28,
+        "supplier_cost_paise": 33000
+      },
+      "PROD-5F96A5": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-A1378F": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      }
+    }
+  }
+}

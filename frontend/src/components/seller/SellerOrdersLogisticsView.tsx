@@ -30,10 +30,24 @@ export const SellerOrdersLogisticsView: React.FC<SellerOrdersLogisticsViewProps>
   const [copiedHash, setCopiedHash] = useState(false);
 
   useEffect(() => {
-    fetch(`${BACKEND_URL}/api/seller/orders`)
-      .then((res) => res.json())
-      .then((data) => setOrders(data.orders || []))
-      .catch(() => {});
+    let isMounted = true;
+    const fetchOrders = () => {
+      fetch(`${BACKEND_URL}/api/seller/orders`, { cache: "no-store" })
+        .then((res) => res.json())
+        .then((data) => {
+          if (isMounted && data.orders) {
+            setOrders(data.orders);
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 2500);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const handleAutoDispatch = async (orderId: string) => {

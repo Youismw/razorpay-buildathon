@@ -357,6 +357,31 @@ export const SellerCatalogView: React.FC<SellerCatalogViewProps> = ({
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
 
+  // Global Real-Time Synchronization (Polls every 2.5s)
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchLiveCatalog = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/seller/catalog`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.items && Array.isArray(data.items) && isMounted) {
+          setItems(data.items);
+        }
+      } catch {
+        // Silently handle offline/polling error
+      }
+    };
+
+    fetchLiveCatalog();
+    const interval = setInterval(fetchLiveCatalog, 2500);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   // Voice Search State
   const [isCatalogListening, setIsCatalogListening] = useState(false);
   const catalogRecognitionRef = useRef<any>(null);
