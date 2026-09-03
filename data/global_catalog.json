@@ -160,7 +160,7 @@
         "price_paise": 7200,
         "category": "groceries",
         "in_stock": true,
-        "stock": 12
+        "stock": 11
       },
       "PROD-MILK-CD": {
         "name": "Country Delight Pure Cow Milk (1L)",
@@ -185,7 +185,7 @@
         "price_paise": 36000,
         "category": "groceries",
         "in_stock": true,
-        "stock": 12
+        "stock": 11
       },
       "PROD-COF-BT": {
         "name": "Blue Tokai Attikan Estate Dark Roast Coffee (250g)",
@@ -198,7 +198,7 @@
         "price_paise": 27500,
         "category": "groceries",
         "in_stock": true,
-        "stock": 12
+        "stock": 11
       },
       "PROD-ATTA-FORT": {
         "name": "Fortune Chakki Fresh Whole Wheat Atta (5kg)",
@@ -211,7 +211,7 @@
         "price_paise": 5500,
         "category": "groceries",
         "in_stock": true,
-        "stock": 12
+        "stock": 11
       },
       "PROD-BRD-TBD": {
         "name": "The Baker's Dozen Country Sourdough Loaf (350g)",
@@ -224,7 +224,7 @@
         "price_paise": 28500,
         "category": "groceries",
         "in_stock": true,
-        "stock": 12
+        "stock": 11
       },
       "PROD-BTR-PRES": {
         "name": "Pr\u00e9sident Salted Gourmet Butter (200g)",
@@ -243,7 +243,7 @@
         "price_paise": 4800,
         "category": "groceries",
         "in_stock": true,
-        "stock": 7
+        "stock": 5
       },
       "PROD-SONY-WH-CH520-WIRELE": {
         "name": "Sony WH-CH520 Wireless Headphones",
@@ -342,6 +342,14 @@
         "supplier_cost_paise": 1850000
       },
       "PROD-A08279": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-72C476": {
         "name": "Bose QuietComfort 45 Noise Canceling Headphones",
         "price_paise": 2499900,
         "category": "electronics",

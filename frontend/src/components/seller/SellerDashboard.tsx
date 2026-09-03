@@ -19,6 +19,7 @@ import { SellerOrdersLogisticsView } from "./SellerOrdersLogisticsView";
 import { SellerAnalyticsView } from "./SellerAnalyticsView";
 import { SellerSettlementView } from "./SellerSettlementView";
 import { SellerProfileView } from "./SellerProfileView";
+import { ZoomContainer } from "../shared/ZoomContainer";
 
 interface SellerDashboardProps {
   onBack: () => void;
@@ -155,45 +156,47 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({ onBack }) => {
       />
 
       {/* Main Tab Views */}
-      <main className="flex-1 relative z-10 flex flex-col">
-        {activeTab === "chat" && (
-          <SellerChatAssistant
-            profile={profile}
-            sellerMode={sellerMode}
-            onNavigateToCatalog={() => setActiveTab("catalog")}
-          />
-        )}
+      <main className="flex-1 relative z-10 flex flex-col min-h-0">
+        <ZoomContainer>
+          {activeTab === "chat" && (
+            <SellerChatAssistant
+              profile={profile}
+              sellerMode={sellerMode}
+              onNavigateToCatalog={() => setActiveTab("catalog")}
+            />
+          )}
 
-        {activeTab === "catalog" && (
-          <SellerCatalogView
-            profile={profile}
-            sellerMode={sellerMode}
-            onTriggerScan={() => setActiveTab("chat")}
-          />
-        )}
+          {activeTab === "catalog" && (
+            <SellerCatalogView
+              profile={profile}
+              sellerMode={sellerMode}
+              onTriggerScan={() => setActiveTab("chat")}
+            />
+          )}
 
-        {activeTab === "orders" && <SellerOrdersLogisticsView />}
+          {activeTab === "orders" && <SellerOrdersLogisticsView />}
 
-        {activeTab === "analytics" && (
-          <SellerAnalyticsView
-            profile={profile}
-            onNavigateToOrders={() => setActiveTab("orders")}
-          />
-        )}
+          {activeTab === "analytics" && (
+            <SellerAnalyticsView
+              profile={profile}
+              onNavigateToOrders={() => setActiveTab("orders")}
+            />
+          )}
 
-        {activeTab === "settlement" && (
-          <SellerSettlementView
-            profile={profile}
-            onUpdatePreferences={handleUpdateSettlement}
-          />
-        )}
+          {activeTab === "settlement" && (
+            <SellerSettlementView
+              profile={profile}
+              onUpdatePreferences={handleUpdateSettlement}
+            />
+          )}
 
-        {activeTab === "profile" && (
-          <SellerProfileView
-            profile={profile}
-            onSaveProfile={handleUpdateProfile}
-          />
-        )}
+          {activeTab === "profile" && (
+            <SellerProfileView
+              profile={profile}
+              onSaveProfile={handleUpdateProfile}
+            />
+          )}
+        </ZoomContainer>
       </main>
     </div>
   );

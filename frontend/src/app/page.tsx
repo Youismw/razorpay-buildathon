@@ -14,6 +14,7 @@ import { AdvancedToolsView } from "@/components/advanced/AdvancedToolsView";
 import { SellerDashboard } from "@/components/seller/SellerDashboard";
 import { PinPromptModal } from "@/components/shared/PinPromptModal";
 import { SetPinModal } from "@/components/shared/SetPinModal";
+import { ZoomContainer } from "@/components/shared/ZoomContainer";
 import { ToastProvider, useToast } from "@/components/shared/ToastContext";
 import {
   BuyRequest,
@@ -346,38 +347,40 @@ function AppContent() {
       )}
 
       <main className="flex-1 relative z-10 flex flex-col min-h-0 w-full">
-        {activeTab === "search" && (
-          <SearchView
-            stages={stages}
-            isStreaming={isStreaming}
-            currentTraceId={currentTraceId}
-            failureExplanation={failureExplanation}
-            liveThoughts={liveThoughts}
-            searchMode={searchMode}
-            profile={profile}
-            onExecute={handleExecute}
-            onReset={handleReset}
-          />
-        )}
-        {activeTab === "catalog" && (
-          <CatalogView catalogs={catalogs} onBuyItem={handleBuyFromCatalog} />
-        )}
-        {activeTab === "profile" && (
-          <ProfileView
-            profile={profile}
-            onUpdateProfile={(updated) => setProfile(updated)}
-            onShowToast={showToast}
-          />
-        )}
-        {activeTab === "security" && <SecurityView invariants={invariants} />}
-        {activeTab === "history" && (
-          <HistoryView
-            transactions={transactions}
-            onSelectTransaction={(tx) => showToast("Trace Selected", tx.trace_id, "info")}
-          />
-        )}
-        {activeTab === "mandates" && <MandatesView />}
-        {activeTab === "advanced" && <AdvancedToolsView />}
+        <ZoomContainer>
+          {activeTab === "search" && (
+            <SearchView
+              stages={stages}
+              isStreaming={isStreaming}
+              currentTraceId={currentTraceId}
+              failureExplanation={failureExplanation}
+              liveThoughts={liveThoughts}
+              searchMode={searchMode}
+              profile={profile}
+              onExecute={handleExecute}
+              onReset={handleReset}
+            />
+          )}
+          {activeTab === "catalog" && (
+            <CatalogView catalogs={catalogs} onBuyItem={handleBuyFromCatalog} />
+          )}
+          {activeTab === "profile" && (
+            <ProfileView
+              profile={profile}
+              onUpdateProfile={(updated) => setProfile(updated)}
+              onShowToast={showToast}
+            />
+          )}
+          {activeTab === "security" && <SecurityView invariants={invariants} />}
+          {activeTab === "history" && (
+            <HistoryView
+              transactions={transactions}
+              onSelectTransaction={(tx) => showToast("Trace Selected", tx.trace_id, "info")}
+            />
+          )}
+          {activeTab === "mandates" && <MandatesView />}
+          {activeTab === "advanced" && <AdvancedToolsView />}
+        </ZoomContainer>
       </main>
 
       {/* UPI PIN Confirmation Modal */}
