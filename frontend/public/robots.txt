@@ -1,0 +1,5 @@
+# robots.txt for Agentic UPI Commerce Bridge
+User-agent: *
+Allow: /
+
+Sitemap: https://ap2bridge.dev/sitemap.xml

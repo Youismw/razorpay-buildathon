@@ -123,25 +123,25 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onSelectRole }) => {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h2 className="display-heading text-2xl group-hover:text-[var(--brown)] transition-colors">
-                  I&apos;m a Seller
+                  I&apos;m a Merchant / Seller
                 </h2>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--gold-faint)] border border-[rgba(196,162,101,0.3)] text-[10px] font-mono font-bold text-[var(--brown)]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)] animate-pulse" />
-                  In Progress
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-[10px] font-mono font-bold text-emerald-700">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live &amp; Autonomous
                 </span>
               </div>
               <p className="text-sm text-[var(--text-secondary)] leading-relaxed mb-4">
-                Connect your Universal Commerce Protocol (UCP) adapter, upload signed price manifests,
-                and receive governed autonomous agent orders.
+                Grow revenue by making your store machine-readable to AI buyers. Monitor competitor prices
+                across Amazon &amp; ONDC, automate dynamic margins, and settle orders via Razorpay UPI Autopay.
               </p>
             </div>
 
             <div className="pt-4 border-t border-[rgba(92,61,46,0.08)] flex items-center justify-between">
               <span className="text-xs font-mono text-[var(--text-muted)]">
-                UCP Adapter & KYC Verification
+                AI Growth &amp; Agentic Commerce Engine
               </span>
               <div className="flex items-center gap-1.5 text-sm font-bold text-[var(--brown)] group-hover:text-[var(--gold)] transition-colors">
-                <span>Preview Portal</span>
+                <span>Enter Merchant Co-Pilot</span>
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </div>
             </div>
