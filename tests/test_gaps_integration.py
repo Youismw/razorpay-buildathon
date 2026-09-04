@@ -111,3 +111,61 @@ def test_buyer_profile_sync():
     updated = res_post.json()["profile"]
     assert updated["userName"] == "Rohit Chauhan (Lead Engineer)"
     assert updated["maxTransactionLimitInr"] == 20000.0
+
+
+def test_razorpay_webhook_rejects_invalid_signature():
+    """Bug 8 verification: Webhook must reject forged/mismatched HMAC signatures."""
+    res_bad = client.post(
+        "/api/webhooks/razorpay",
+        json={
+            "event": "payment.captured",
+            "payload": {"payment": {"entity": {"id": "pay_fake_999"}}},
+            "signature": "bad_forged_hmac_signature_00000000000000000000000000000000",
+        },
+    )
+    assert res_bad.status_code == 401
+    assert "Invalid Razorpay webhook" in res_bad.json()["detail"]
+
+
+def test_server_side_pin_verification():
+    """Bug 16 verification: Transactions requiring PIN must enforce PIN verification on backend."""
+    # Configure profile to require PIN
+    client.post("/api/buyer/profile", json={"autonomyMode": "pin_required", "userPin": "8899"})
+
+    # 1. Missing PIN -> ESCALATED / PIN_REQUIRED
+    res_no_pin = client.post("/buy", json={
+        "raw_intent": "Buy Sony WH-CH520 headphones",
+        "max_spend_inr": 5000,
+        "allowed_merchants": ["demo-merchant.myshopify.com"],
+        "llm_provider": "mock",
+    })
+    assert res_no_pin.status_code == 200
+    data = res_no_pin.json()
+    assert data["status"] == "ESCALATED"
+    assert data["decision"] == "PIN_REQUIRED"
+
+    # 2. Wrong PIN -> 403 Forbidden
+    res_wrong_pin = client.post("/buy", json={
+        "raw_intent": "Buy Sony WH-CH520 headphones",
+        "max_spend_inr": 5000,
+        "allowed_merchants": ["demo-merchant.myshopify.com"],
+        "llm_provider": "mock",
+        "pin": "0000",
+    })
+    assert res_wrong_pin.status_code == 403
+    assert "INVALID_PIN" in res_wrong_pin.json()["detail"]
+
+    # 3. Correct PIN -> SUCCESS
+    res_correct_pin = client.post("/buy", json={
+        "raw_intent": "Buy Sony WH-CH520 headphones",
+        "max_spend_inr": 5000,
+        "allowed_merchants": ["demo-merchant.myshopify.com"],
+        "llm_provider": "mock",
+        "pin": "8899",
+    })
+    assert res_correct_pin.status_code == 200
+    assert res_correct_pin.json()["status"] == "SUCCESS"
+
+    # Reset profile to default
+    client.post("/api/buyer/profile", json={"autonomyMode": "ask_above_limit", "userPin": "1234", "maxTransactionLimitInr": 15000.0})
+

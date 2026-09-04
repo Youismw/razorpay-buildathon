@@ -133,7 +133,8 @@ class AwsKmsVaultSigner(AbstractVaultSigner):
 
         # In production with live KMS:
         digest = compute_sha256(canonical_str)
-        digest_bytes = bytes.fromhex(digest)
+        raw_hex = digest[7:] if digest.startswith("sha256:") else digest
+        digest_bytes = bytes.fromhex(raw_hex)
 
         response = self._boto3_client.sign(
             KeyId=self.key_arn,
@@ -143,23 +144,74 @@ class AwsKmsVaultSigner(AbstractVaultSigner):
         )
         der_signature = response["Signature"]
 
+        # Convert ASN.1 DER signature to IEEE P1363 raw 64-byte format (RFC 7515 §3.4 ES256)
+        from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+        r, s = decode_dss_signature(der_signature)
+        raw_signature = r.to_bytes(32, byteorder="big") + s.to_bytes(32, byteorder="big")
+
         # Form standard compact JWS with KMS signature
-        # (Header and payload base64url encoded with signature)
         import base64
         header_b64 = base64.urlsafe_b64encode(
             json.dumps({"alg": "ES256", "typ": "JWT", "kid": key_id}).encode("utf-8")
         ).rstrip(b"=").decode("ascii")
         payload_b64 = base64.urlsafe_b64encode(canonical_str.encode("utf-8")).rstrip(b"=").decode("ascii")
-        sig_b64 = base64.urlsafe_b64encode(der_signature).rstrip(b"=").decode("ascii")
+        sig_b64 = base64.urlsafe_b64encode(raw_signature).rstrip(b"=").decode("ascii")
 
         return f"{header_b64}.{payload_b64}.{sig_b64}"
 
     def verify(self, compact_jws: str) -> Dict[str, Any]:
-        # Verification can proceed against public key material
-        return self._fallback_signer.verify(compact_jws)
+        if not self.is_live_kms_available:
+            return self._fallback_signer.verify(compact_jws)
+
+        import base64
+        from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+        parts = compact_jws.split(".")
+        if len(parts) != 3:
+            raise ValueError("Malformed JWS token")
+
+        signing_input = f"{parts[0]}.{parts[1]}".encode("ascii")
+        import hashlib
+        digest_bytes = hashlib.sha256(signing_input).digest()
+
+        sig_padding = "=" * ((4 - len(parts[2]) % 4) % 4)
+        raw_sig = base64.urlsafe_b64decode(parts[2] + sig_padding)
+        if len(raw_sig) != 64:
+            raise ValueError(f"Invalid IEEE P1363 signature length: {len(raw_sig)}, expected 64")
+
+        r = int.from_bytes(raw_sig[:32], byteorder="big")
+        s = int.from_bytes(raw_sig[32:], byteorder="big")
+        der_signature = encode_dss_signature(r, s)
+
+        resp = self._boto3_client.verify(
+            KeyId=self.key_arn,
+            Message=digest_bytes,
+            MessageType="DIGEST",
+            Signature=der_signature,
+            SigningAlgorithm="ECDSA_SHA_256",
+        )
+        if not resp.get("SignatureValid", False):
+            raise ValueError("KMS signature verification failed")
+
+        payload_padding = "=" * ((4 - len(parts[1]) % 4) % 4)
+        payload_bytes = base64.urlsafe_b64decode(parts[1] + payload_padding)
+        return json.loads(payload_bytes.decode("utf-8"))
 
     def get_public_jwks(self) -> Dict[str, Any]:
-        return self._fallback_signer.get_public_jwks()
+        if not self.is_live_kms_available:
+            return self._fallback_signer.get_public_jwks()
+        try:
+            from cryptography.hazmat.primitives.serialization import load_der_public_key
+            from jwcrypto import jwk
+            pub_key_der = self._boto3_client.get_public_key(KeyId=self.key_arn)["PublicKey"]
+            pub_key = load_der_public_key(pub_key_der)
+            key_jwk = jwk.JWK.from_pyca(pub_key)
+            jwk_dict = json.loads(key_jwk.export_public())
+            jwk_dict["kid"] = "2026-08-ap2-1"
+            jwk_dict["use"] = "sig"
+            jwk_dict["alg"] = "ES256"
+            return {"keys": [jwk_dict]}
+        except Exception:
+            return self._fallback_signer.get_public_jwks()
 
 
 def get_vault_signer() -> AbstractVaultSigner:

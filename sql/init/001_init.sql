@@ -168,8 +168,12 @@ GRANT INSERT, UPDATE, SELECT ON checkout_sessions TO ledger_writer;
 GRANT INSERT, UPDATE, SELECT ON a2a_tasks TO ledger_writer;
 GRANT INSERT, UPDATE, SELECT ON vault_outbox TO ledger_writer;
 
-GRANT SELECT ON mandates TO guardrail_reader, adapter_reader;
-GRANT SELECT ON debits TO guardrail_reader, adapter_reader;
+GRANT INSERT, UPDATE, SELECT ON mandates TO adapter_reader;
+GRANT INSERT, UPDATE, SELECT ON debits TO adapter_reader;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO adapter_reader;
+
+GRANT SELECT ON mandates TO guardrail_reader;
+GRANT SELECT ON debits TO guardrail_reader;
 GRANT SELECT ON audit_events TO guardrail_reader, adapter_reader;
 GRANT SELECT ON constraint_enforcement_audit TO guardrail_reader, adapter_reader;
 

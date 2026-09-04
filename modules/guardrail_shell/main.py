@@ -5,6 +5,7 @@ Pipeline: Schema → Policy → Grounding → Confidence.
 Returns APPROVED or ESCALATED. Never silently drops (INV-007).
 """
 
+import uuid
 from typing import Any, Dict, Optional
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
@@ -31,6 +32,7 @@ class GuardrailEvaluateResponse(BaseModel):
     schema_valid: bool
     policy_passed: bool
     grounding_verified: bool
+    guardrail_decision_id: Optional[str] = None
     policy_violations: list = Field(default_factory=list)
     grounding_details: Dict[str, Any] = Field(default_factory=dict)
     hitl_payload: Optional[Dict[str, Any]] = None
@@ -129,12 +131,14 @@ def evaluate_proposal(req: GuardrailEvaluateRequest):
         "scores": confidence.scores.model_dump(),
     })
 
+    decision_id = f"grd_{uuid.uuid4().hex[:12]}" if confidence.decision == "APPROVED" else None
     return GuardrailEvaluateResponse(
         decision=confidence.decision,
         confidence_score=confidence.confidence_score,
         schema_valid=True,
         policy_passed=policy_result.passed,
         grounding_verified=grounding_result.verified,
+        guardrail_decision_id=decision_id,
         policy_violations=[v.model_dump() for v in policy_result.violations],
         grounding_details=grounding_result.details,
         hitl_payload=confidence.hitl_payload.model_dump() if confidence.hitl_payload else None,

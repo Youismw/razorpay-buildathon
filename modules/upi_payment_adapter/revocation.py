@@ -63,8 +63,9 @@ class RevocationEngine:
         self._init_db()
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path, timeout=15.0, check_same_thread=False)
+        conn = sqlite3.connect(self._db_path, timeout=15.0, check_same_thread=False, isolation_level=None)
         conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA busy_timeout=15000;")
         return conn
 
     def _init_db(self):
@@ -79,7 +80,6 @@ class RevocationEngine:
                     updated_at TEXT NOT NULL
                 );
             """)
-            conn.commit()
 
     def _get_mandate_lock(self, mandate_id: str) -> threading.Lock:
         """Get or create a per-mandate lock."""
@@ -116,6 +116,7 @@ class RevocationEngine:
             now = datetime.datetime.now(datetime.timezone.utc).isoformat()
             conn = self._get_connection()
             try:
+                conn.execute("BEGIN IMMEDIATE;")
                 conn.execute(
                     """
                     INSERT INTO mandates (mandate_id, state, max_amount_paise, token_id, revoked_at, updated_at)
@@ -128,24 +129,34 @@ class RevocationEngine:
                     """,
                     (mandate_id, "PAYMENT_ACTIVE", max_amount_paise, token_id, now),
                 )
-                conn.commit()
+                conn.execute("COMMIT;")
+            except Exception:
+                try:
+                    conn.execute("ROLLBACK;")
+                except Exception:
+                    pass
+                raise
             finally:
                 conn.close()
 
     def revoke(self, mandate_id: str, reason: str = "User requested revocation") -> MandateState:
         """
         Atomically revoke a mandate (INV-004).
-        This acquires the per-mandate lock, ensuring any concurrent debit sees REVOKED.
+        This acquires the per-mandate lock and SQLite IMMEDIATE write transaction,
+        ensuring any concurrent debit sees REVOKED across multi-worker environments.
         """
         lock = self._get_mandate_lock(mandate_id)
         with lock:
             conn = self._get_connection()
             try:
+                conn.execute("BEGIN IMMEDIATE;")
                 mandate = self._fetch_mandate(conn, mandate_id)
                 if mandate is None:
+                    conn.execute("ROLLBACK;")
                     raise ValueError(f"Mandate {mandate_id} not found")
 
                 if mandate.state == "REVOKED":
+                    conn.execute("ROLLBACK;")
                     raise MandateRevocationError(f"Mandate {mandate_id} is already revoked")
 
                 now = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -157,12 +168,18 @@ class RevocationEngine:
                     """,
                     (now, now, mandate_id),
                 )
-                conn.commit()
+                conn.execute("COMMIT;")
 
                 mandate.state = "REVOKED"
                 mandate.revoked_at = now
                 mandate.updated_at = now
                 return mandate
+            except Exception:
+                try:
+                    conn.execute("ROLLBACK;")
+                except Exception:
+                    pass
+                raise
             finally:
                 conn.close()
 
@@ -177,55 +194,88 @@ class RevocationEngine:
         with lock:
             conn = self._get_connection()
             try:
+                conn.execute("BEGIN IMMEDIATE;")
                 mandate = self._fetch_mandate(conn, mandate_id)
                 if mandate is None:
+                    conn.execute("ROLLBACK;")
                     raise ValueError(f"Mandate {mandate_id} not found")
 
                 if mandate.state == "REVOKED":
+                    conn.execute("ROLLBACK;")
                     raise MandateRevocationError(
                         f"MANDATE_REVOKED: Mandate {mandate_id} was revoked at {mandate.revoked_at}. "
                         f"Debit of {amount_paise} paise is rejected."
                     )
 
                 if mandate.state != "PAYMENT_ACTIVE":
+                    conn.execute("ROLLBACK;")
                     raise ValueError(
                         f"Mandate {mandate_id} is in state '{mandate.state}', not PAYMENT_ACTIVE. "
                         f"Cannot debit."
                     )
 
                 if amount_paise > mandate.max_amount_paise:
+                    conn.execute("ROLLBACK;")
                     raise ValueError(
                         f"Debit amount {amount_paise} exceeds mandate max {mandate.max_amount_paise}"
                     )
 
+                conn.execute("COMMIT;")
                 return mandate
+            except Exception:
+                try:
+                    conn.execute("ROLLBACK;")
+                except Exception:
+                    pass
+                raise
             finally:
                 conn.close()
 
     def mark_settled(self, mandate_id: str) -> MandateState:
-        """Mark mandate as settled after successful payment."""
+        """Mark mandate as settled after successful payment (INV-004)."""
         lock = self._get_mandate_lock(mandate_id)
         with lock:
             conn = self._get_connection()
             try:
+                conn.execute("BEGIN IMMEDIATE;")
                 mandate = self._fetch_mandate(conn, mandate_id)
                 if mandate is None:
+                    conn.execute("ROLLBACK;")
                     raise ValueError(f"Mandate {mandate_id} not found")
 
+                if mandate.state == "REVOKED":
+                    conn.execute("ROLLBACK;")
+                    raise MandateRevocationError(
+                        f"MANDATE_REVOKED: Mandate {mandate_id} was revoked at {mandate.revoked_at}. "
+                        f"Settlement rejected (INV-004)."
+                    )
+
                 now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                conn.execute(
+                cur = conn.cursor()
+                cur.execute(
                     """
                     UPDATE mandates
                     SET state = 'SETTLED', updated_at = ?
-                    WHERE mandate_id = ?
+                    WHERE mandate_id = ? AND state != 'REVOKED'
                     """,
                     (now, mandate_id),
                 )
-                conn.commit()
+                if cur.rowcount == 0:
+                    conn.execute("ROLLBACK;")
+                    raise MandateRevocationError(
+                        f"MANDATE_REVOKED: Mandate {mandate_id} was revoked concurrently before settlement could commit."
+                    )
+                conn.execute("COMMIT;")
 
                 mandate.state = "SETTLED"
                 mandate.updated_at = now
                 return mandate
+            except Exception:
+                try:
+                    conn.execute("ROLLBACK;")
+                except Exception:
+                    pass
+                raise
             finally:
                 conn.close()
 

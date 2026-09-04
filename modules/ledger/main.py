@@ -1,6 +1,7 @@
 import uuid
 import datetime
 import json
+import threading
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
@@ -13,6 +14,7 @@ _in_memory_audit_log: List[Dict[str, Any]] = []
 _in_memory_mandates: Dict[str, Dict[str, Any]] = {}
 _in_memory_debits: Dict[str, Dict[str, Any]] = {}
 _last_hash: str = "0" * 64
+_ledger_chain_lock = threading.Lock()
 
 
 class AuditEventRequest(BaseModel):
@@ -63,25 +65,26 @@ def record_audit_event(req: AuditEventRequest):
     global _last_hash
     
     event_id = str(uuid.uuid4())
-    current_hash = calculate_audit_hash(_last_hash, req.payload)
     ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
     
-    event_record = {
-        "event_id": event_id,
-        "source_component": req.source_component,
-        "event_type": req.event_type,
-        "mandate_id": req.mandate_id,
-        "transaction_id": req.transaction_id,
-        "constraint_hash": req.constraint_hash,
-        "llm_invocation_id": req.llm_invocation_id,
-        "payload": req.payload,
-        "previous_hash": _last_hash,
-        "hash": current_hash,
-        "created_at": ts,
-    }
-    
-    _in_memory_audit_log.append(event_record)
-    _last_hash = current_hash
+    with _ledger_chain_lock:
+        prev_hash = _last_hash
+        current_hash = calculate_audit_hash(prev_hash, req.payload)
+        event_record = {
+            "event_id": event_id,
+            "source_component": req.source_component,
+            "event_type": req.event_type,
+            "mandate_id": req.mandate_id,
+            "transaction_id": req.transaction_id,
+            "constraint_hash": req.constraint_hash,
+            "llm_invocation_id": req.llm_invocation_id,
+            "payload": req.payload,
+            "previous_hash": prev_hash,
+            "hash": current_hash,
+            "created_at": ts,
+        }
+        _in_memory_audit_log.append(event_record)
+        _last_hash = current_hash
     
     return AuditEventResponse(
         event_id=event_id,
@@ -90,7 +93,7 @@ def record_audit_event(req: AuditEventRequest):
         mandate_id=req.mandate_id,
         transaction_id=req.transaction_id,
         constraint_hash=req.constraint_hash,
-        previous_hash=event_record["previous_hash"],
+        previous_hash=prev_hash,
         hash=current_hash,
         created_at=ts,
     )

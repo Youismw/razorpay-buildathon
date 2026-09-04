@@ -101,7 +101,7 @@ def update_seller_profile(profile_data: Dict[str, Any]) -> SellerProfile:
     merchant_id = _current_profile.merchant_id
     for item in _current_profile.routine_restock_items:
         clean_slug = re.sub(r"[^a-zA-Z0-9]+", "-", item.product_name).strip("-").upper()
-        prod_id = f"PROD-{clean_slug[:20]}"
+        prod_id = f"PROD-{clean_slug[:14]}-{uuid.uuid4().hex[:6].upper()}"
         cost_inr = item.supplier_cost_inr or 100.0
         margin_mult = 1.0 + ((item.preferred_margin_pct or _current_profile.default_margin_pct or 25.0) / 100.0)
         selling_inr = round(cost_inr * margin_mult, 2)
@@ -137,13 +137,44 @@ BUSINESS_TYPE_CATEGORIES: Dict[str, set] = {
     "construction": {"construction", "hardware"},
 }
 
-# In-memory registry of custom or imported products owned by a specific merchant
+# Persistent registry of custom or imported products owned by a specific merchant
 _MERCHANT_OWNED_SKUS: Dict[str, set] = {}
+MERCHANT_SKUS_FILE_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "merchant_skus.json")
+
+
+def save_merchant_skus_to_disk() -> None:
+    """Save merchant registered SKUs to persistent disk storage."""
+    try:
+        os.makedirs(os.path.dirname(MERCHANT_SKUS_FILE_PATH), exist_ok=True)
+        serializable = {m_id: sorted(list(skus)) for m_id, skus in _MERCHANT_OWNED_SKUS.items()}
+        with open(MERCHANT_SKUS_FILE_PATH, "w", encoding="utf-8") as f:
+            json.dump(serializable, f, indent=2)
+    except Exception as e:
+        print(f"[MERCHANT SKUS PERSISTENCE] Warning: failed to save merchant skus: {e}")
+
+
+def load_merchant_skus_from_disk() -> None:
+    """Load merchant registered SKUs from persistent disk storage."""
+    global _MERCHANT_OWNED_SKUS
+    try:
+        if os.path.exists(MERCHANT_SKUS_FILE_PATH):
+            with open(MERCHANT_SKUS_FILE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    for m_id, skus in data.items():
+                        _MERCHANT_OWNED_SKUS.setdefault(m_id, set()).update(skus)
+    except Exception as e:
+        print(f"[MERCHANT SKUS PERSISTENCE] Warning: failed to load merchant skus: {e}")
+
+
+# Initialize SKUs from disk
+load_merchant_skus_from_disk()
 
 
 def register_merchant_product(merchant_id: str, product_id: str) -> None:
     """Register a product as explicitly owned/sold by a merchant."""
     _MERCHANT_OWNED_SKUS.setdefault(merchant_id, set()).add(product_id)
+    save_merchant_skus_to_disk()
 
 
 def is_product_sold_by_merchant(
@@ -166,7 +197,7 @@ def is_product_sold_by_merchant(
     profile = get_seller_profile()
     for it in profile.routine_restock_items:
         clean_slug = re.sub(r"[^a-zA-Z0-9]+", "-", it.product_name).strip("-").upper()
-        if product_id in (f"PROD-{clean_slug[:20]}", it.id):
+        if product_id == it.id or product_id.startswith(f"PROD-{clean_slug[:14]}") or product_id.startswith(f"PROD-{clean_slug[:20]}"):
             return True
 
     # If category wasn't passed, find it from DEMO_MERCHANT_CATALOG
@@ -371,7 +402,7 @@ def dispatch_order_logistics(
     selected = next((c for c in carriers if c["name"] == carrier_preference), carriers[0])
     tracking_id = f"AWB-{uuid.uuid4().hex[:8].upper()}"
 
-    return LogisticsDispatch(
+    dispatch = LogisticsDispatch(
         order_id=order_id,
         carrier=selected["name"],  # type: ignore
         tracking_id=tracking_id,
@@ -382,6 +413,16 @@ def dispatch_order_logistics(
         recipient_name=recipient_name,
         delivery_address=delivery_address,
     )
+
+    # Attach dispatch and transition order to DISPATCHED
+    for order in LIVE_SELLER_ORDERS:
+        if order.order_id == order_id:
+            order.order_status = "DISPATCHED"
+            order.logistics = dispatch
+            save_orders_to_disk()
+            break
+
+    return dispatch
 
 
 def generate_mock_seller_orders() -> List[SellerOrder]:
@@ -567,34 +608,38 @@ def update_order_status_by_razorpay(
     new_status: str = "PAID_CONFIRMED",
 ) -> Optional[SellerOrder]:
     """Update order payment status when verified by Razorpay Standard Checkout or Webhook."""
+    if not razorpay_order_id and not payment_id:
+        return None
+
     for order in LIVE_SELLER_ORDERS:
         matched = False
-        if razorpay_order_id and order.razorpay_order_id == razorpay_order_id:
+        if razorpay_order_id and (order.razorpay_order_id == razorpay_order_id or razorpay_order_id in order.trace_id or order.order_id == razorpay_order_id):
             matched = True
-        elif razorpay_order_id and razorpay_order_id in order.trace_id:
+        elif payment_id and order.razorpay_payment_id == payment_id:
             matched = True
+
         if matched:
             order.order_status = new_status  # type: ignore
             order.razorpay_payment_id = payment_id
+            if razorpay_order_id:
+                order.razorpay_order_id = razorpay_order_id
+            save_orders_to_disk()
             return order
 
-    # Fallback to most recent in-flight order if not matched specifically
-    for order in LIVE_SELLER_ORDERS:
-        if order.order_status in ("CONFIRMED", "PROCESSING"):
-            order.order_status = new_status  # type: ignore
-            order.razorpay_order_id = razorpay_order_id or order.razorpay_order_id
-            order.razorpay_payment_id = payment_id
-            return order
     return None
 
 
 def refund_order_by_payment_id(payment_id: str, refund_id: str) -> Optional[SellerOrder]:
     """Mark an order as REFUNDED upon Razorpay refund execution."""
+    if not payment_id:
+        return None
+
     for order in LIVE_SELLER_ORDERS:
-        if order.razorpay_payment_id == payment_id or order.order_status == "PAID_CONFIRMED":
+        if order.razorpay_payment_id == payment_id:
             order.order_status = "REFUNDED"
             order.failure_stage = "REFUND_EXECUTION"
             order.failure_reason = f"Refunded in full via Razorpay Refund ID: {refund_id}"
+            save_orders_to_disk()
             return order
     return None
 
@@ -609,10 +654,10 @@ def get_analytics_summary(timeframe: str = "3m") -> AnalyticsSummary:
     multipliers = {"1m": 1.0, "3m": 2.8, "6m": 5.4, "1y": 11.2}
     mult = multipliers.get(timeframe, 2.8)
 
-    # Calculate additional revenue and profit from live buyer orders
-    live_additional_rev = sum(o.selling_price_inr for o in LIVE_SELLER_ORDERS if o.order_status in ["CONFIRMED", "DISPATCHED", "DELIVERED"])
-    live_additional_profit = sum(o.net_profit_inr for o in LIVE_SELLER_ORDERS if o.order_status in ["CONFIRMED", "DISPATCHED", "DELIVERED"])
-    live_additional_orders = len([o for o in LIVE_SELLER_ORDERS if o.order_status in ["CONFIRMED", "DISPATCHED", "DELIVERED"]])
+    # Calculate additional revenue and profit from live buyer orders (including PAID_CONFIRMED)
+    live_additional_rev = sum(o.selling_price_inr for o in LIVE_SELLER_ORDERS if o.order_status in ["CONFIRMED", "PAID_CONFIRMED", "DISPATCHED", "DELIVERED"])
+    live_additional_profit = sum(o.net_profit_inr for o in LIVE_SELLER_ORDERS if o.order_status in ["CONFIRMED", "PAID_CONFIRMED", "DISPATCHED", "DELIVERED"])
+    live_additional_orders = len([o for o in LIVE_SELLER_ORDERS if o.order_status in ["CONFIRMED", "PAID_CONFIRMED", "DISPATCHED", "DELIVERED"]])
 
     base_rev = (184500.0 * mult) + live_additional_rev
     base_orders = int(48 * mult) + live_additional_orders

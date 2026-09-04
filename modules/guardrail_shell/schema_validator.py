@@ -4,6 +4,7 @@ Validates ProposalObject emitted by the LLM Reasoning Core.
 Rejects unknown fields, enforces required fields, max 2 retries then escalate.
 """
 
+import copy
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from enum import Enum
@@ -65,10 +66,57 @@ class SchemaValidationResult(BaseModel):
 MAX_SCHEMA_RETRIES = 2
 
 
+def _attempt_schema_repair(raw_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Attempt safe automated repair for common LLM formatting inconsistencies:
+    - Coercing string/float price & quantity into valid integers
+    - Reconciling total_price_paise with sum of items if rounding mismatch
+    """
+    repaired = copy.deepcopy(raw_dict)
+    if "items" in repaired and isinstance(repaired["items"], list):
+        for item in repaired["items"]:
+            if isinstance(item, dict):
+                if "offer_price_paise" in item:
+                    try:
+                        item["offer_price_paise"] = int(round(float(item["offer_price_paise"])))
+                    except (ValueError, TypeError):
+                        pass
+                if "quantity" in item:
+                    try:
+                        item["quantity"] = int(item["quantity"])
+                    except (ValueError, TypeError):
+                        pass
+        try:
+            computed_total = sum(
+                int(item.get("offer_price_paise", 0)) * int(item.get("quantity", 1))
+                for item in repaired["items"]
+                if isinstance(item, dict)
+            )
+            if "total_price_paise" in repaired:
+                current_total = int(round(float(repaired["total_price_paise"])))
+                if abs(current_total - computed_total) <= 5:
+                    repaired["total_price_paise"] = computed_total
+                else:
+                    repaired["total_price_paise"] = current_total
+            elif computed_total > 0:
+                repaired["total_price_paise"] = computed_total
+        except Exception:
+            pass
+
+    if "total_price_paise" in repaired and not isinstance(repaired["total_price_paise"], int):
+        try:
+            repaired["total_price_paise"] = int(round(float(repaired["total_price_paise"])))
+        except (ValueError, TypeError):
+            pass
+
+    return repaired
+
+
 def validate_proposal_schema(raw_dict: Dict[str, Any], retry_count: int = 0) -> SchemaValidationResult:
     """
     Validate a raw dictionary against the ProposalObject schema.
-    Returns validation result. On failure after MAX_SCHEMA_RETRIES, signals escalation.
+    Returns validation result. On failure, attempts automated safe repair if retry_count < MAX_SCHEMA_RETRIES.
+    On failure after MAX_SCHEMA_RETRIES, signals escalation.
     """
     errors = []
 
@@ -79,7 +127,17 @@ def validate_proposal_schema(raw_dict: Dict[str, Any], retry_count: int = 0) -> 
         error_msg = str(e)
         errors.append(error_msg)
 
+        if retry_count < MAX_SCHEMA_RETRIES:
+            repaired_dict = _attempt_schema_repair(raw_dict)
+            if repaired_dict != raw_dict:
+                repaired_result = validate_proposal_schema(repaired_dict, retry_count=retry_count + 1)
+                if repaired_result.valid:
+                    return repaired_result
+                else:
+                    errors.extend(repaired_result.errors)
+
         if retry_count >= MAX_SCHEMA_RETRIES:
             errors.append(f"Schema validation failed after {MAX_SCHEMA_RETRIES} retries. Escalating to HITL.")
 
         return SchemaValidationResult(valid=False, errors=errors, retry_count=retry_count)
+

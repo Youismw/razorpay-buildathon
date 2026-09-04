@@ -39,6 +39,7 @@ class RazorpayRecurringCharge(BaseModel):
     amount_paise: int = Field(..., gt=0)
     currency: str = Field(default="INR")
     description: str = Field(default="AP2 Mandate Debit")
+    customer_id: Optional[str] = None
 
 
 class RazorpayClientResponse(BaseModel):
@@ -113,7 +114,7 @@ class RazorpayClient:
             "amount": charge.amount_paise,
             "currency": charge.currency,
             "order_id": charge.razorpay_order_id,
-            "customer_id": "",
+            "customer_id": charge.customer_id or os.environ.get("RAZORPAY_CUSTOMER_ID", "cust_ap2_buyer"),
             "token": charge.token_id,
             "recurring": "1",
             "description": charge.description,

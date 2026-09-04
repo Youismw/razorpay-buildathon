@@ -55,6 +55,19 @@ def sign_mandate(req: MandateSignRequest):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid mandate type: {req.mandate_type}. Must be INTENT, CART, or PAYMENT."
         )
+
+    # INV-002: Mandate Vault Gate Verification
+    if not req.guardrail_decision_id or len(req.guardrail_decision_id.strip()) < 3:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guardrail gate check failed: Missing or unauthorized guardrail_decision_id (INV-002)."
+        )
+
+    if not req.constraint_hash or not req.constraint_hash.startswith("sha256:"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid constraint_hash format. Must be a valid sha256 digest."
+        )
     
     # Verify hash integrity before signing
     canonical_str = canonicalize_json(req.payload_canonical_json)

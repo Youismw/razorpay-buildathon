@@ -159,14 +159,15 @@
         "name": "Amul Taaza Homogenised Toned Milk (1L)",
         "price_paise": 7200,
         "category": "groceries",
-        "in_stock": true,
-        "stock": 4
+        "in_stock": false,
+        "stock": 0
       },
       "PROD-MILK-CD": {
         "name": "Country Delight Pure Cow Milk (1L)",
         "price_paise": 8500,
         "category": "groceries",
-        "in_stock": true
+        "in_stock": true,
+        "stock": 13
       },
       "PROD-MILK-NANDINI": {
         "name": "Nandini Special Pasteurized Milk (1L)",
@@ -184,8 +185,8 @@
         "name": "Nescaf\u00e9 Classic Instant Coffee Glass Jar (100g)",
         "price_paise": 36000,
         "category": "groceries",
-        "in_stock": true,
-        "stock": 4
+        "in_stock": false,
+        "stock": 0
       },
       "PROD-COF-BT": {
         "name": "Blue Tokai Attikan Estate Dark Roast Coffee (250g)",
@@ -198,20 +199,21 @@
         "price_paise": 27500,
         "category": "groceries",
         "in_stock": true,
-        "stock": 4
+        "stock": 1
       },
       "PROD-ATTA-FORT": {
         "name": "Fortune Chakki Fresh Whole Wheat Atta (5kg)",
         "price_paise": 24500,
         "category": "groceries",
-        "in_stock": true
+        "in_stock": true,
+        "stock": 19
       },
       "PROD-BRD-BRIT": {
         "name": "Britannia 100% Whole Wheat Bread (400g)",
         "price_paise": 5500,
         "category": "groceries",
-        "in_stock": true,
-        "stock": 4
+        "in_stock": false,
+        "stock": 0
       },
       "PROD-BRD-TBD": {
         "name": "The Baker's Dozen Country Sourdough Loaf (350g)",
@@ -223,8 +225,8 @@
         "name": "Amul Pasteurized Salted Table Butter (500g)",
         "price_paise": 28500,
         "category": "groceries",
-        "in_stock": true,
-        "stock": 4
+        "in_stock": false,
+        "stock": 0
       },
       "PROD-BTR-PRES": {
         "name": "Pr\u00e9sident Salted Gourmet Butter (200g)",
@@ -244,14 +246,14 @@
         "price_paise": 4800,
         "category": "groceries",
         "in_stock": true,
-        "stock": 18
+        "stock": 5
       },
       "PROD-SONY-WH-CH520-WIRELE": {
         "name": "Sony WH-CH520 Wireless Headphones",
         "price_paise": 460800,
         "category": "electronics",
         "in_stock": true,
-        "stock": 39,
+        "stock": 33,
         "supplier_cost_paise": 360000
       },
       "PROD-AMUL-TAAZA-HOMOGENIS": {
@@ -421,6 +423,310 @@
         "in_stock": true,
         "stock": 9,
         "supplier_cost_paise": 1850000
+      },
+      "PROD-A8DC3E": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-C8D3D0": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 10,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-8CAB53": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-SONY-WH-CH520--EEF4FE": {
+        "name": "Sony WH-CH520 Wireless Headphones",
+        "price_paise": 460800,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 37,
+        "supplier_cost_paise": 360000
+      },
+      "PROD-AMUL-TAAZA-HOM-CA2018": {
+        "name": "Amul Taaza Homogenised Toned Milk (1L)",
+        "price_paise": 6925,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 120,
+        "supplier_cost_paise": 5800
+      },
+      "PROD-BLUE-TOKAI-ATT-0A4D33": {
+        "name": "Blue Tokai Attikan Dark Roast (250g)",
+        "price_paise": 42834,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 28,
+        "supplier_cost_paise": 33000
+      },
+      "PROD-116E25": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-SONY-WH-CH520--2E275C": {
+        "name": "Sony WH-CH520 Wireless Headphones",
+        "price_paise": 460800,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 39,
+        "supplier_cost_paise": 360000
+      },
+      "PROD-AMUL-TAAZA-HOM-6575FF": {
+        "name": "Amul Taaza Homogenised Toned Milk (1L)",
+        "price_paise": 6925,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 120,
+        "supplier_cost_paise": 5800
+      },
+      "PROD-BLUE-TOKAI-ATT-B06F80": {
+        "name": "Blue Tokai Attikan Dark Roast (250g)",
+        "price_paise": 42834,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 28,
+        "supplier_cost_paise": 33000
+      },
+      "PROD-AFCAF1": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-ORGANIC-COLD-P-C1943E": {
+        "name": "ORGANIC COLD PRESSED APPLE JUICE 500ML",
+        "price_paise": 15000,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 20,
+        "supplier_cost_paise": 12000
+      },
+      "PROD-ORGANIC-COLD-P-D56161": {
+        "name": "ORGANIC COLD PRESSED APPLE JUICE 1000ML",
+        "price_paise": 25000,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 20,
+        "supplier_cost_paise": 20000
+      },
+      "PROD-SONY-WH-CH520--E0D9B7": {
+        "name": "Sony WH-CH520 Wireless Headphones",
+        "price_paise": 460800,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 38,
+        "supplier_cost_paise": 360000
+      },
+      "PROD-AMUL-TAAZA-HOM-C17512": {
+        "name": "Amul Taaza Homogenised Toned Milk (1L)",
+        "price_paise": 6925,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 120,
+        "supplier_cost_paise": 5800
+      },
+      "PROD-BLUE-TOKAI-ATT-937BD5": {
+        "name": "Blue Tokai Attikan Dark Roast (250g)",
+        "price_paise": 42834,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 28,
+        "supplier_cost_paise": 33000
+      },
+      "PROD-1C755B": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-ORGANIC-COLD-P-D99FF1": {
+        "name": "ORGANIC COLD PRESSED APPLE JUICE 500ML",
+        "price_paise": 15000,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 20,
+        "supplier_cost_paise": 12000
+      },
+      "PROD-ORGANIC-COLD-P-D422F7": {
+        "name": "ORGANIC COLD PRESSED APPLE JUICE 1000ML",
+        "price_paise": 25000,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 20,
+        "supplier_cost_paise": 20000
+      },
+      "PROD-SONY-WH-CH520--77A950": {
+        "name": "Sony WH-CH520 Wireless Headphones",
+        "price_paise": 460800,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 39,
+        "supplier_cost_paise": 360000
+      },
+      "PROD-AMUL-TAAZA-HOM-66B786": {
+        "name": "Amul Taaza Homogenised Toned Milk (1L)",
+        "price_paise": 6925,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 120,
+        "supplier_cost_paise": 5800
+      },
+      "PROD-BLUE-TOKAI-ATT-0B725C": {
+        "name": "Blue Tokai Attikan Dark Roast (250g)",
+        "price_paise": 42834,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 28,
+        "supplier_cost_paise": 33000
+      },
+      "PROD-CD306A": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-ORGANIC-COLD-P-BF2497": {
+        "name": "ORGANIC COLD PRESSED APPLE JUICE 500ML",
+        "price_paise": 15000,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 20,
+        "supplier_cost_paise": 12000
+      },
+      "PROD-ORGANIC-COLD-P-558961": {
+        "name": "ORGANIC COLD PRESSED APPLE JUICE 1000ML",
+        "price_paise": 25000,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 20,
+        "supplier_cost_paise": 20000
+      },
+      "PROD-SONY-WH-CH520--1A6E8C": {
+        "name": "Sony WH-CH520 Wireless Headphones",
+        "price_paise": 460800,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 39,
+        "supplier_cost_paise": 360000
+      },
+      "PROD-AMUL-TAAZA-HOM-1E1D48": {
+        "name": "Amul Taaza Homogenised Toned Milk (1L)",
+        "price_paise": 6925,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 120,
+        "supplier_cost_paise": 5800
+      },
+      "PROD-BLUE-TOKAI-ATT-01B901": {
+        "name": "Blue Tokai Attikan Dark Roast (250g)",
+        "price_paise": 42834,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 28,
+        "supplier_cost_paise": 33000
+      },
+      "PROD-89729D": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-ORGANIC-COLD-P-B9C6FC": {
+        "name": "ORGANIC COLD PRESSED APPLE JUICE 500ML",
+        "price_paise": 15000,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 20,
+        "supplier_cost_paise": 12000
+      },
+      "PROD-ORGANIC-COLD-P-A8C1B7": {
+        "name": "ORGANIC COLD PRESSED APPLE JUICE 1000ML",
+        "price_paise": 25000,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 20,
+        "supplier_cost_paise": 20000
+      },
+      "PROD-SONY-WH-CH520--B571F4": {
+        "name": "Sony WH-CH520 Wireless Headphones",
+        "price_paise": 460800,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 40,
+        "supplier_cost_paise": 360000
+      },
+      "PROD-AMUL-TAAZA-HOM-44D42C": {
+        "name": "Amul Taaza Homogenised Toned Milk (1L)",
+        "price_paise": 6925,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 120,
+        "supplier_cost_paise": 5800
+      },
+      "PROD-BLUE-TOKAI-ATT-C869E8": {
+        "name": "Blue Tokai Attikan Dark Roast (250g)",
+        "price_paise": 42834,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 28,
+        "supplier_cost_paise": 33000
+      },
+      "PROD-00B84D": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-ORGANIC-COLD-P-5D84B3": {
+        "name": "ORGANIC COLD PRESSED APPLE JUICE 500ML",
+        "price_paise": 15000,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 20,
+        "supplier_cost_paise": 12000
+      },
+      "PROD-ORGANIC-COLD-P-385559": {
+        "name": "ORGANIC COLD PRESSED APPLE JUICE 1000ML",
+        "price_paise": 25000,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 20,
+        "supplier_cost_paise": 20000
+      },
+      "TEST-SUPPLIER-COST-SKU": {
+        "name": "Custom Hardware Widget",
+        "price_paise": 100000,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 10,
+        "supplier_cost_paise": 60000
       }
     }
   }

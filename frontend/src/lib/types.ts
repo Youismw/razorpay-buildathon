@@ -119,6 +119,8 @@ export interface BuyRequest {
   mode?: "basic" | "advanced";
   llm_provider?: "auto" | "groq" | "gemini" | "openrouter" | "mock";
   simulate_failure_stage?: number;
+  idempotency_key?: string;
+  pin?: string;
 }
 
 export interface BuyResponse {

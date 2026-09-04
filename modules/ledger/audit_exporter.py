@@ -8,11 +8,13 @@ Generates comprehensive per-transaction audit trail files:
 
 import json
 import datetime
+import threading
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
 
 AUDIT_LOGS_DIR = Path("audit_logs")
+_jsonl_lock = threading.Lock()
 
 
 def ensure_audit_dir() -> Path:
@@ -78,9 +80,10 @@ def write_transaction_audit_files(
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(audit_record, f, indent=2, default=str)
 
-    # 2. Append to unified JSONL stream (DR-004)
-    with open(jsonl_path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(audit_record, default=str) + "\n")
+    # 2. Append to unified JSONL stream (DR-004) with thread lock
+    with _jsonl_lock:
+        with open(jsonl_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(audit_record, default=str) + "\n")
 
     # 3. Human-readable Markdown Audit Trail Report
     md_lines = [

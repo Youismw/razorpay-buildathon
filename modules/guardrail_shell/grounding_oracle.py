@@ -8,9 +8,13 @@ Production: Compares against injected UCP manifest with cryptographic hashes.
 
 import os
 import json
+import hashlib
+import threading
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 from modules.guardrail_shell.schema_validator import ProposalItem
+
+_catalog_lock = threading.Lock()
 
 
 class GroundingCheckResult(BaseModel):
@@ -285,7 +289,8 @@ def verify_grounding(
 
     unverified: List[str] = []
     details: Dict[str, Any] = {}
-    manifest_hash = None
+    manifest_hashes: List[str] = []
+    seen_merchants = set()
 
     for item in items:
         merchant_data = catalog.get(item.merchant_id)
@@ -295,7 +300,11 @@ def verify_grounding(
             details[item.product_id] = {"status": "MERCHANT_NOT_FOUND"}
             continue
 
-        manifest_hash = merchant_data.get("manifest_hash")
+        m_hash = merchant_data.get("manifest_hash")
+        if m_hash and item.merchant_id not in seen_merchants:
+            seen_merchants.add(item.merchant_id)
+            manifest_hashes.append(m_hash)
+
         products = merchant_data.get("products", {})
         product_data = products.get(item.product_id)
 
@@ -317,10 +326,17 @@ def verify_grounding(
             }
             continue
 
-        # Stock check
-        if not product_data.get("in_stock", False):
-            unverified.append(f"{item.product_id}: product is out of stock")
-            details[item.product_id] = {"status": "OUT_OF_STOCK"}
+        # Stock check: verify product is marked in_stock AND stock >= item.quantity (INV-002, Bug 13)
+        available_stock = product_data.get("stock", 20 if product_data.get("in_stock", False) else 0)
+        if not product_data.get("in_stock", False) or available_stock < item.quantity:
+            unverified.append(
+                f"{item.product_id}: insufficient stock (requested {item.quantity}, available {available_stock})"
+            )
+            details[item.product_id] = {
+                "status": "INSUFFICIENT_STOCK" if available_stock < item.quantity else "OUT_OF_STOCK",
+                "requested": item.quantity,
+                "available": available_stock,
+            }
             continue
 
         details[item.product_id] = {
@@ -329,9 +345,18 @@ def verify_grounding(
             "proposed_price": item.offer_price_paise,
         }
 
+    # Aggregate manifest hash: single merchant uses direct hash, multi-merchant uses composite SHA-256
+    if len(manifest_hashes) == 1:
+        final_manifest_hash = manifest_hashes[0]
+    elif len(manifest_hashes) > 1:
+        composite = ":".join(sorted(manifest_hashes))
+        final_manifest_hash = f"sha256:{hashlib.sha256(composite.encode('utf-8')).hexdigest()}"
+    else:
+        final_manifest_hash = None
+
     return GroundingCheckResult(
         verified=len(unverified) == 0,
-        manifest_hash=manifest_hash,
+        manifest_hash=final_manifest_hash,
         unverified_items=unverified,
         details=details,
     )
@@ -398,29 +423,30 @@ def decrement_inventory(
     product_id: str,
     quantity: int = 1,
 ) -> Dict[str, Any]:
-    """Reduce product stock upon successful settlement, updating stock quantity and in_stock flag."""
-    merchant_data = DEMO_MERCHANT_CATALOG.get(merchant_id)
-    if not merchant_data:
-        return {"status": "MERCHANT_NOT_FOUND"}
+    """Reduce product stock upon successful settlement with serialized thread-safety (INV-004, Bug 14)."""
+    with _catalog_lock:
+        merchant_data = DEMO_MERCHANT_CATALOG.get(merchant_id)
+        if not merchant_data:
+            return {"status": "MERCHANT_NOT_FOUND"}
 
-    products = merchant_data.get("products", {})
-    product = products.get(product_id)
-    if not product:
-        return {"status": "PRODUCT_NOT_FOUND"}
+        products = merchant_data.get("products", {})
+        product = products.get(product_id)
+        if not product:
+            return {"status": "PRODUCT_NOT_FOUND"}
 
-    current_stock = product.get("stock", 20)
-    new_stock = max(0, current_stock - quantity)
-    product["stock"] = new_stock
-    if new_stock == 0:
-        product["in_stock"] = False
+        current_stock = product.get("stock", 20)
+        new_stock = max(0, current_stock - quantity)
+        product["stock"] = new_stock
+        if new_stock == 0:
+            product["in_stock"] = False
 
-    save_catalog_to_disk()
+        save_catalog_to_disk()
 
-    return {
-        "status": "DECREMENTED",
-        "product_id": product_id,
-        "previous_stock": current_stock,
-        "remaining_stock": new_stock,
-        "in_stock": product["in_stock"],
-    }
+        return {
+            "status": "DECREMENTED",
+            "product_id": product_id,
+            "previous_stock": current_stock,
+            "remaining_stock": new_stock,
+            "in_stock": product["in_stock"],
+        }
 

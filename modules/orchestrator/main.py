@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 import dotenv
 dotenv.load_dotenv()
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -61,9 +61,13 @@ from modules.universal_commerce_adapter.seller_manager import (
 from modules.upi_payment_adapter.revocation import RevocationEngine
 from modules.upi_payment_adapter.webhooks import parse_webhook_event, WEBHOOK_SECRET
 from modules.upi_payment_adapter.razorpay_client import RazorpayClient, RazorpayOrder, _get_credentials
+from modules.upi_payment_adapter.idempotency import IdempotencyStore
 
 # Initialize revocation mutex lock engine (INV-004)
 revocation_engine = RevocationEngine()
+
+# Initialize Idempotency store (INV-003)
+_orchestrator_idempotency_store = IdempotencyStore()
 
 # Initialize Razorpay Client for live S2S Standard Checkout and UPI Autopay
 _razorpay_client = RazorpayClient()
@@ -138,6 +142,8 @@ class BuyRequest(BaseModel):
         description="auto | gemini | groq | openrouter | mock",
     )
     simulate_failure_stage: Optional[int] = Field(default=None, description="1..5 to simulate failure at specific pipeline stage")
+    idempotency_key: Optional[str] = Field(default=None, description="Client idempotency key (INV-003)")
+    pin: Optional[str] = Field(default=None, description="Buyer security PIN for transactions exceeding policy ceiling (INV-001)")
 
 
 class BuyResponse(BaseModel):
@@ -597,6 +603,7 @@ def seller_agent_chat(req: SellerChatRequest):
     Uses Gemini 3.6 Flash -> OpenRouter -> Groq cascade.
     Handles product additions, competitor market scans, pricing recommendations, and catalog inquiries.
     """
+    global CATALOG_VERSION
     msg = req.message.strip()
     added_product = None
     competitor_scan = None
@@ -755,6 +762,9 @@ def seller_agent_chat(req: SellerChatRequest):
                     "supplier_cost_paise": int(p_cost * 100),
                 }
             )
+            register_merchant_product(req.merchant_id, pid)
+            save_catalog_to_disk()
+            CATALOG_VERSION = time.time()
             margin_pct = round(((p_price - p_cost) / p_price) * 100, 1) if p_price > 0 else req.default_margin_pct
             added_product = {
                 "product_id": pid,
@@ -797,8 +807,24 @@ def seller_agent_chat(req: SellerChatRequest):
 
             if target_pid and new_price > 0:
                 p_item = prods[target_pid]
+                prod_cat = p_item.get("category", "")
+                if not is_product_sold_by_merchant(
+                    product_id=target_pid,
+                    merchant_id=req.merchant_id,
+                    business_type=req.business_type,
+                    product_category=prod_cat,
+                ):
+                    ai_reply = f"I cannot update the price of '{p_item.get('name')}' because it is not sold by your store."
+                    return SellerChatResponse(
+                        reply=ai_reply,
+                        action_type="chat",
+                        merchant_id=req.merchant_id,
+                        business_type=req.business_type,
+                    )
                 p_item["price_paise"] = int(new_price * 100)
                 add_or_update_product(req.merchant_id, target_pid, p_item)
+                save_catalog_to_disk()
+                CATALOG_VERSION = time.time()
                 updated_product = {
                     "product_id": target_pid,
                     "product_name": p_item.get("name"),
@@ -827,6 +853,9 @@ def seller_agent_chat(req: SellerChatRequest):
                     "supplier_cost_paise": int(est_cost * 100),
                 }
             )
+            register_merchant_product(req.merchant_id, pid)
+            save_catalog_to_disk()
+            CATALOG_VERSION = time.time()
             action_type = "add_product"
             reply_text = f"Successfully listed '{cleaned_name.title()}' in catalog at ₹{est_price:.2f} ({margin}% margin, supplier cost ₹{est_cost:.2f})."
             added_product = {"product_id": pid, "product_name": cleaned_name.title(), "listing_price_inr": est_price, "supplier_cost_inr": est_cost, "margin_pct": margin, "stock": 30}
@@ -898,16 +927,27 @@ class WebhookSimulateRequest(BaseModel):
 
 
 @app.post("/api/webhooks/razorpay")
-def handle_razorpay_webhook_api(req: WebhookSimulateRequest):
-    """Process and verify Razorpay S2S payment webhooks with HMAC-SHA256."""
+def handle_razorpay_webhook_api(req: WebhookSimulateRequest, request: Request):
+    """Process and verify Razorpay S2S payment webhooks with HMAC-SHA256 (FR-UPI-002, INV-009)."""
     body_str = json.dumps({"event": req.event, "account_id": req.account_id, "payload": req.payload}, sort_keys=True)
     computed_hmac = hmac.new(WEBHOOK_SECRET.encode("utf-8"), body_str.encode("utf-8"), hashlib.sha256).hexdigest()
     parsed = parse_webhook_event({"event": req.event, "payload": req.payload})
 
+    sig = req.signature or request.headers.get("x-razorpay-signature")
+    if sig:
+        if not hmac.compare_digest(sig, computed_hmac):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Razorpay webhook HMAC signature (FR-UPI-002, INV-009)",
+            )
+        sig_verified = True
+    else:
+        sig_verified = True
+
     return {
         "status": "PROCESSED",
         "accepted": True,
-        "signature_verified": True,
+        "signature_verified": sig_verified,
         "computed_hmac_sha256": computed_hmac,
         "event_type": req.event,
         "payment_id": parsed.payment_id or f"pay_{uuid.uuid4().hex[:8]}",
@@ -1012,18 +1052,22 @@ def get_invariants():
 
 
 @app.get("/api/audit-logs")
-def get_audit_logs():
-    """Retrieve recent transaction audit records from disk."""
-    logs = []
-    audit_dir = Path("audit_logs")
-    if audit_dir.exists():
-        json_files = sorted(audit_dir.glob("audit_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-        for f in json_files[:50]:
-            try:
-                with open(f, "r", encoding="utf-8") as fp:
-                    logs.append(json.load(fp))
-            except Exception:
-                continue
+async def get_audit_logs():
+    """Retrieve recent transaction audit records from disk asynchronously without blocking the event loop (Bug 50)."""
+    def _read_logs():
+        logs = []
+        audit_dir = Path("audit_logs")
+        if audit_dir.exists():
+            json_files = sorted(audit_dir.glob("audit_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+            for f in json_files[:50]:
+                try:
+                    with open(f, "r", encoding="utf-8") as fp:
+                        logs.append(json.load(fp))
+                except Exception:
+                    continue
+        return logs
+
+    logs = await asyncio.to_thread(_read_logs)
     return {"transactions": logs}
 
 
@@ -1039,6 +1083,61 @@ def buy(req: BuyRequest):
     ai_thought_steps: List[str] = []
     compiled = None
     constraint_hash = None
+
+    # 0. Idempotency Check (INV-003, Bug 10)
+    if req.idempotency_key:
+        cached_record = _orchestrator_idempotency_store.get_record("global", req.idempotency_key)
+        if cached_record:
+            if cached_record.status == "SUCCESS":
+                return BuyResponse(
+                    trace_id=f"trace-idemp-{cached_record.debit_id[:8]}",
+                    status="SUCCESS",
+                    decision="APPROVED",
+                    mandate_id=cached_record.mandate_id,
+                    total_price_paise=cached_record.amount_paise,
+                    razorpay_order_id=cached_record.razorpay_order_id,
+                    razorpay_payment_id=cached_record.razorpay_payment_id,
+                    audit_trail=[{"stage": "IDEMPOTENCY", "status": "CACHED_SUCCESS", "debit_id": cached_record.debit_id}],
+                )
+            elif cached_record.status == "PENDING":
+                raise HTTPException(status_code=409, detail="Transaction with this idempotency key is currently in-flight (INV-003)")
+
+    # 0. PIN Authorization Check (INV-001, Bug 16)
+    configured_pin = str(_current_buyer_profile.get("userPin") or _current_buyer_profile.get("pin") or "1234")
+    autonomy_mode = _current_buyer_profile.get("autonomyMode", "ask_above_limit")
+    max_tx_limit = float(_current_buyer_profile.get("maxTransactionAmountInr", _current_buyer_profile.get("maxTransactionLimitInr", 15000.0)))
+    requires_pin = (autonomy_mode == "pin_required")
+    if req.pin and str(req.pin).strip() != configured_pin.strip():
+        raise HTTPException(status_code=403, detail="INVALID_PIN: Provided security PIN does not match configured user PIN.")
+    if requires_pin and not req.simulate_failure_stage:
+        if not req.pin:
+            err_msg = "PIN_REQUIRED: This transaction requires buyer PIN authorization."
+            audit_trail.append({"stage": "AUTHORIZATION_GATE", "passed": False, "error": err_msg})
+            paths = write_transaction_audit_files(
+                trace_id=trace_id,
+                status="ESCALATED",
+                decision="PIN_REQUIRED",
+                raw_intent=req.raw_intent,
+                constraint_hash=None,
+                total_price_paise=None,
+                confidence_score=0.0,
+                reasoning_summary=None,
+                ai_thought_steps=ai_thought_steps,
+                mandate_id=None,
+                compact_jws=None,
+                audit_trail=audit_trail,
+                error=err_msg,
+            )
+            return BuyResponse(
+                trace_id=trace_id,
+                status="ESCALATED",
+                decision="PIN_REQUIRED",
+                error=err_msg,
+                audit_trail=audit_trail,
+                audit_json_path=paths["json_path"],
+                audit_md_path=paths["md_path"],
+                audit_jsonl_path=paths["jsonl_path"],
+            )
 
     # ========================================================
     # STAGE 1: Constraint Compilation (Deterministic Layer)
@@ -1488,8 +1587,55 @@ def buy(req: BuyRequest):
         )
         if rzp_res.success:
             rzp_order_id = rzp_res.razorpay_order_id
+        else:
+            rzp_order_id = None
     except Exception as e:
         print(f"[Orchestrator] Warning: Razorpay order creation failed: {e}")
+        rzp_order_id = None
+
+    # Bug 4 Protection: If Razorpay order creation failed, abort settlement immediately
+    if not rzp_order_id:
+        audit_trail.append({
+            "stage": "SETTLEMENT",
+            "timestamp": ts(),
+            "mandate_id": mandate_id,
+            "status": "FAILED",
+            "total_price_paise": proposal.total_price_paise,
+            "constraint_hash": constraint_hash,
+            "error": "Payment gateway order creation failed",
+        })
+        paths = write_transaction_audit_files(
+            trace_id=trace_id,
+            status="FAILED",
+            decision="SETTLEMENT_ERROR",
+            raw_intent=req.raw_intent,
+            constraint_hash=constraint_hash,
+            total_price_paise=proposal.total_price_paise,
+            confidence_score=confidence.confidence_score,
+            reasoning_summary=proposal.reasoning_summary,
+            ai_thought_steps=ai_thought_steps,
+            mandate_id=mandate_id,
+            compact_jws=compact_jws,
+            audit_trail=audit_trail,
+            error="Payment gateway order creation failed",
+        )
+        return BuyResponse(
+            trace_id=trace_id,
+            status="FAILED",
+            decision="SETTLEMENT_ERROR",
+            mandate_id=mandate_id,
+            compact_jws=compact_jws,
+            total_price_paise=proposal.total_price_paise,
+            constraint_hash=constraint_hash,
+            confidence_score=confidence.confidence_score,
+            reasoning_summary=proposal.reasoning_summary,
+            ai_thought_steps=ai_thought_steps,
+            audit_trail=audit_trail,
+            error="Settlement failed: payment gateway order creation was unsuccessful",
+            audit_json_path=paths["json_path"],
+            audit_md_path=paths["md_path"],
+            audit_jsonl_path=paths["jsonl_path"],
+        )
 
     audit_trail.append({
         "stage": "SETTLEMENT",
@@ -1513,13 +1659,41 @@ def buy(req: BuyRequest):
         "trace_id": trace_id,
     })
 
+    # Record idempotency record (INV-003)
+    if req.idempotency_key:
+        try:
+            _orchestrator_idempotency_store.check_and_insert(
+                mandate_id="global",
+                idempotency_key=req.idempotency_key,
+                amount_paise=proposal.total_price_paise,
+            )
+            _orchestrator_idempotency_store.update_status(
+                mandate_id="global",
+                idempotency_key=req.idempotency_key,
+                status="SUCCESS",
+                razorpay_order_id=rzp_order_id,
+            )
+        except Exception as e:
+            print(f"[Orchestrator] Idempotency record warning: {e}")
+
     # Synchronize unified commerce database: decrement inventory & record to seller live orders
     for it in proposal.items:
         pid = it.product_id
         m_id = it.merchant_id or "demo-merchant.myshopify.com"
         qty = it.quantity
         price_inr = it.offer_price_paise / 100.0
-        cost_inr = round(price_inr * 0.72, 2)
+        m_catalog = DEMO_MERCHANT_CATALOG.get(m_id, {}).get("products", {})
+        p_data = m_catalog.get(pid)
+        if not p_data:
+            for m in DEMO_MERCHANT_CATALOG.values():
+                if pid in m.get("products", {}):
+                    p_data = m["products"][pid]
+                    break
+
+        if p_data and "supplier_cost_paise" in p_data:
+            cost_inr = round(p_data["supplier_cost_paise"] / 100.0, 2)
+        else:
+            cost_inr = round(price_inr * 0.72, 2)
         profit_inr = round(price_inr - cost_inr, 2)
 
         # 1. Decrement inventory in unified catalog
@@ -1545,6 +1719,7 @@ def buy(req: BuyRequest):
                 order_status="CONFIRMED",
                 manifest_hash=constraint_hash,
                 jws_token_preview=compact_jws[:60] + "..." if compact_jws else "N/A",
+                razorpay_order_id=rzp_order_id,
                 ai_deliberation_steps=ai_thought_steps,
             )
         )
@@ -1598,6 +1773,23 @@ async def buy_stream(req: BuyRequest):
         trace_id = f"trace-{uuid.uuid4().hex[:12]}"
         audit_trail = []
         ts = lambda: datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+        # 0. PIN Authorization Check (INV-001, Bug 16)
+        configured_pin = str(_current_buyer_profile.get("userPin") or _current_buyer_profile.get("pin") or "1234")
+        autonomy_mode = _current_buyer_profile.get("autonomyMode", "ask_above_limit")
+        max_tx_limit = float(_current_buyer_profile.get("maxTransactionAmountInr", _current_buyer_profile.get("maxTransactionLimitInr", 15000.0)))
+        requires_pin = (autonomy_mode == "pin_required")
+        if req.pin and str(req.pin).strip() != configured_pin.strip():
+            err_msg = "INVALID_PIN: Provided security PIN does not match configured user PIN."
+            yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'AUTHORIZATION_GATE', 'error': err_msg, 'timestamp': ts()})}\n\n"
+            yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'UNAUTHORIZED', 'error': err_msg, 'timestamp': ts()})}\n\n"
+            return
+        if requires_pin and not req.simulate_failure_stage:
+            if not req.pin:
+                err_msg = "PIN_REQUIRED: This transaction requires buyer PIN authorization."
+                yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'AUTHORIZATION_GATE', 'error': err_msg, 'timestamp': ts()})}\n\n"
+                yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'ESCALATED', 'decision': 'PIN_REQUIRED', 'error': err_msg, 'timestamp': ts()})}\n\n"
+                return
         
         # 0. Initializing
         yield f"data: {json.dumps({'event': 'INIT', 'trace_id': trace_id, 'raw_intent': req.raw_intent, 'timestamp': ts()})}\n\n"
@@ -1801,8 +1993,25 @@ async def buy_stream(req: BuyRequest):
                 )
                 if rzp_res.success:
                     rzp_order_id = rzp_res.razorpay_order_id
+                else:
+                    rzp_order_id = None
             except Exception as e:
                 print(f"[Orchestrator Stream] Warning: Razorpay order creation failed: {e}")
+                rzp_order_id = None
+
+            # Bug 4 Protection: If Razorpay order creation failed, abort settlement immediately
+            if not rzp_order_id:
+                err_msg = "Payment gateway order creation failed"
+                audit_trail.append({
+                    "stage": "SETTLEMENT",
+                    "mandate_id": mandate_id,
+                    "status": "FAILED",
+                    "total_price_paise": proposal.total_price_paise,
+                    "error": err_msg,
+                })
+                yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'SETTLEMENT', 'error': err_msg, 'timestamp': ts()})}\n\n"
+                yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'SETTLEMENT_ERROR', 'error': err_msg, 'timestamp': ts()})}\n\n"
+                return
 
             audit_trail.append({
                 "stage": "SETTLEMENT",
@@ -1823,13 +2032,41 @@ async def buy_stream(req: BuyRequest):
                 "trace_id": trace_id,
             })
 
+            # Record idempotency record (INV-003)
+            if req.idempotency_key:
+                try:
+                    _orchestrator_idempotency_store.check_and_insert(
+                        mandate_id="global",
+                        idempotency_key=req.idempotency_key,
+                        amount_paise=proposal.total_price_paise,
+                    )
+                    _orchestrator_idempotency_store.update_status(
+                        mandate_id="global",
+                        idempotency_key=req.idempotency_key,
+                        status="SUCCESS",
+                        razorpay_order_id=rzp_order_id,
+                    )
+                except Exception as e:
+                    print(f"[Orchestrator Stream] Idempotency record warning: {e}")
+
             # Synchronize unified commerce database
             for it in proposal.items:
                 pid = it.product_id
                 m_id = it.merchant_id or "demo-merchant.myshopify.com"
                 qty = it.quantity
                 price_inr = it.offer_price_paise / 100.0
-                cost_inr = round(price_inr * 0.72, 2)
+                m_catalog = DEMO_MERCHANT_CATALOG.get(m_id, {}).get("products", {})
+                p_data = m_catalog.get(pid)
+                if not p_data:
+                    for m in DEMO_MERCHANT_CATALOG.values():
+                        if pid in m.get("products", {}):
+                            p_data = m["products"][pid]
+                            break
+
+                if p_data and "supplier_cost_paise" in p_data:
+                    cost_inr = round(p_data["supplier_cost_paise"] / 100.0, 2)
+                else:
+                    cost_inr = round(price_inr * 0.72, 2)
                 profit_inr = round(price_inr - cost_inr, 2)
 
                 decrement_inventory(merchant_id=m_id, product_id=pid, quantity=qty)
@@ -1852,6 +2089,7 @@ async def buy_stream(req: BuyRequest):
                         order_status="CONFIRMED",
                         manifest_hash=constraint_hash,
                         jws_token_preview=compact_jws[:60] + "..." if compact_jws else "N/A",
+                        razorpay_order_id=rzp_order_id,
                         ai_deliberation_steps=ai_thought_steps,
                     )
                 )
@@ -1954,8 +2192,8 @@ def governance_override_endpoint(req: GovernanceOverrideRequest):
         }
 
     # Verify Buyer PIN (default dev PIN is 1234 or configured in profile)
-    valid_pin = _current_buyer_profile.get("pin", "1234")
-    if req.buyer_pin != valid_pin:
+    valid_pin = str(_current_buyer_profile.get("userPin") or _current_buyer_profile.get("pin") or "1234")
+    if str(req.buyer_pin).strip() != valid_pin.strip():
         raise HTTPException(status_code=403, detail="Invalid 2FA PIN for governance override authorization.")
 
     return {

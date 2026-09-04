@@ -26,6 +26,7 @@ class WebhookResult(BaseModel):
     event_type: str
     payment_id: Optional[str] = None
     order_id: Optional[str] = None
+    mandate_id: Optional[str] = None
     status: Optional[str] = None
     error: Optional[str] = None
 
@@ -49,18 +50,29 @@ def verify_razorpay_signature(payload_body: bytes, signature: str, secret: Optio
 
 def parse_webhook_event(body: Dict[str, Any]) -> WebhookResult:
     """
-    Parse a Razorpay webhook event and extract payment status.
-    Handles: payment.captured, payment.failed, payment.authorized.
+    Parse a Razorpay webhook event and extract payment/mandate status.
+    Handles:
+    - Payment events: payment.captured, payment.failed, payment.authorized
+    - UPI Autopay / Mandate events: mandate.authenticated, mandate.active, mandate.revoked, mandate.paused
+    - Subscription events: subscription.authenticated, subscription.activated, subscription.cancelled, subscription.paused
     """
     event_type = body.get("event", "unknown")
-    payment_entity = (
-        body.get("payload", {})
-        .get("payment", {})
-        .get("entity", {})
-    )
+    payload = body.get("payload", {})
+    payment_entity = payload.get("payment", {}).get("entity", {})
+    mandate_entity = payload.get("mandate", {}).get("entity", {})
+    subscription_entity = payload.get("subscription", {}).get("entity", {})
 
     payment_id = payment_entity.get("id")
-    order_id = payment_entity.get("order_id")
+    order_id = (
+        payment_entity.get("order_id")
+        or mandate_entity.get("order_id")
+        or subscription_entity.get("order_id")
+    )
+    mandate_id = (
+        mandate_entity.get("id")
+        or subscription_entity.get("id")
+        or payment_entity.get("mandate_id")
+    )
 
     if event_type == "payment.captured":
         return WebhookResult(
@@ -68,6 +80,7 @@ def parse_webhook_event(body: Dict[str, Any]) -> WebhookResult:
             event_type=event_type,
             payment_id=payment_id,
             order_id=order_id,
+            mandate_id=mandate_id,
             status="SETTLED",
         )
     elif event_type == "payment.failed":
@@ -81,6 +94,7 @@ def parse_webhook_event(body: Dict[str, Any]) -> WebhookResult:
             event_type=event_type,
             payment_id=payment_id,
             order_id=order_id,
+            mandate_id=mandate_id,
             status="FAILED",
             error=error_desc,
         )
@@ -90,7 +104,35 @@ def parse_webhook_event(body: Dict[str, Any]) -> WebhookResult:
             event_type=event_type,
             payment_id=payment_id,
             order_id=order_id,
+            mandate_id=mandate_id,
             status="AUTHORIZED",
+        )
+    elif event_type in ("mandate.authenticated", "mandate.active", "subscription.authenticated", "subscription.activated"):
+        return WebhookResult(
+            accepted=True,
+            event_type=event_type,
+            payment_id=payment_id,
+            order_id=order_id,
+            mandate_id=mandate_id,
+            status="ACTIVE",
+        )
+    elif event_type in ("mandate.revoked", "subscription.cancelled", "subscription.halted"):
+        return WebhookResult(
+            accepted=True,
+            event_type=event_type,
+            payment_id=payment_id,
+            order_id=order_id,
+            mandate_id=mandate_id,
+            status="REVOKED",
+        )
+    elif event_type in ("mandate.paused", "subscription.paused"):
+        return WebhookResult(
+            accepted=True,
+            event_type=event_type,
+            payment_id=payment_id,
+            order_id=order_id,
+            mandate_id=mandate_id,
+            status="PAUSED",
         )
     else:
         return WebhookResult(

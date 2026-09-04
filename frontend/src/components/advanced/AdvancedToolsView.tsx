@@ -58,6 +58,9 @@ export const AdvancedToolsView: React.FC = () => {
           account_id: parsedPayload.account_id || "acc_demo_razorpay",
         }),
       });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: Webhook dispatch rejected`);
+      }
       const data = await res.json();
       setSignatureVerified(true);
       setHmacHash(data.computed_hmac_sha256 || "verified");
@@ -66,9 +69,9 @@ export const AdvancedToolsView: React.FC = () => {
         `HMAC-SHA256 verified for payment.${eventType} (Payment ID: ${data.payment_id})`,
         "success"
       );
-    } catch {
-      setSignatureVerified(true);
-      showToast("Webhook Processed", `HMAC-SHA256 verified for payment.${eventType}`, "success");
+    } catch (err: any) {
+      setSignatureVerified(false);
+      showToast("Webhook Error", err?.message || `Failed to process webhook for payment.${eventType}`, "error");
     }
   };
 

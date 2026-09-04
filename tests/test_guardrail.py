@@ -162,6 +162,20 @@ def test_grounding_rejects_inflated_price():
     assert not result.verified
 
 
+def test_grounding_rejects_insufficient_stock():
+    from modules.guardrail_shell.schema_validator import ProposalItem
+    items = [ProposalItem(
+        product_id="PROD-WH-CH520",
+        product_name="Sony WH-CH520",
+        merchant_id="demo-merchant.myshopify.com",
+        offer_price_paise=499900,
+        quantity=500,  # Exceeds available stock
+    )]
+    result = verify_grounding(items)
+    assert not result.verified
+    assert "insufficient stock" in result.unverified_items[0].lower()
+
+
 # --- Confidence Gate Tests ---
 
 def test_confidence_approves_when_all_pass():

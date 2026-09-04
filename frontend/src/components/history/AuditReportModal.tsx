@@ -39,41 +39,6 @@ export const AuditReportModal: React.FC<AuditReportModalProps> = ({
     setTimeout(() => setCopiedField(null), 2000);
   };
 
-  const downloadMarkdownReport = () => {
-    const md = `# Cryptographic Audit Report — Trace ${transaction.trace_id}
-**Generated**: ${new Date(transaction.timestamp).toISOString()}
-**Status**: ${transaction.status} (${transaction.decision})
-**Total Amount**: ₹${amountInr.toFixed(2)}
-**Buyer Intent**: "${transaction.raw_intent}"
-**Confidence Score**: ${transaction.confidence_score || 0.88}
-
-## Security Invariants Enforced
-- [x] INV-001: Zero Key LLM Isolation
-- [x] INV-002: Mandatory Guardrail Shell Gate
-- [x] INV-003: Idempotency Guarantee
-- [x] INV-004: Revocation Priority Race (Atomic Lock)
-- [x] INV-005: Append-Only Immutable Ledger
-- [x] INV-008: Canonical Hashing Protocol (RFC 8785)
-- [x] INV-009: ECDSA Key Storage Non-Exportability
-- [x] INV-010: Guardrail Hard Ceilings
-
-## 5-Stage Deterministic Sandwich Verification
-1. CONSTRAINT_COMPILATION: Verified RFC 8785 SHA-256 canonical hash
-2. LLM_REASONING: Candidate proposal generated with ground catalog mapping
-3. GUARDRAIL_SHELL: Schema validated + Policy ceiling checked + Catalog grounded
-4. VAULT_SIGNING: ES256 ECDSA JWS token signed with kid 2026-08-ap2-1
-5. SETTLEMENT: Atomic UPI transfer executed via append-only ledger
-`;
-
-    const blob = new Blob([md], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `audit_${transaction.trace_id}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   // Dynamically evaluate 5-stage sandwich statuses based on transaction data
   const getStageSandwichStatus = () => {
     if (isSuccess) {
@@ -160,6 +125,51 @@ export const AuditReportModal: React.FC<AuditReportModalProps> = ({
   };
 
   const sandwichStages = getStageSandwichStatus();
+
+  const downloadMarkdownReport = () => {
+    const inv001 = isSuccess || sandwichStages[1].ok !== false;
+    const inv002 = sandwichStages[2].ok === true;
+    const inv003 = !transaction.decision?.includes("IDEMPOTENCY");
+    const inv004 = !transaction.decision?.includes("REVOKED");
+    const inv005 = true; // Immutable ledger always records
+    const inv008 = sandwichStages[0].ok === true;
+    const inv009 = sandwichStages[3].ok !== false;
+    const inv010 = sandwichStages[2].ok === true;
+
+    const confScore =
+      transaction.confidence_score !== undefined && transaction.confidence_score !== null
+        ? transaction.confidence_score
+        : 0.0;
+
+    const md = `# Cryptographic Audit Report — Trace ${transaction.trace_id}
+**Generated**: ${new Date(transaction.timestamp).toISOString()}
+**Status**: ${transaction.status} (${transaction.decision || "N/A"})
+**Total Amount**: ₹${amountInr.toFixed(2)}
+**Buyer Intent**: "${transaction.raw_intent}"
+**Confidence Score**: ${confScore.toFixed(2)}
+
+## Security Invariants Enforced
+- [${inv001 ? "x" : " "}] INV-001: Zero Key LLM Isolation
+- [${inv002 ? "x" : " "}] INV-002: Mandatory Guardrail Shell Gate
+- [${inv003 ? "x" : " "}] INV-003: Idempotency Guarantee
+- [${inv004 ? "x" : " "}] INV-004: Revocation Priority Race (Atomic Lock)
+- [${inv005 ? "x" : " "}] INV-005: Append-Only Immutable Ledger
+- [${inv008 ? "x" : " "}] INV-008: Canonical Hashing Protocol (RFC 8785)
+- [${inv009 ? "x" : " "}] INV-009: ECDSA Key Storage Non-Exportability
+- [${inv010 ? "x" : " "}] INV-010: Guardrail Hard Ceilings
+
+## 5-Stage Deterministic Sandwich Verification
+${sandwichStages.map((s, idx) => `${idx + 1}. ${s.stage.toUpperCase()}: ${s.status} (${s.ok === true ? "PASS" : s.ok === false ? "FAIL" : "BYPASSED"})`).join("\n")}
+`;
+
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `audit_${transaction.trace_id}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">

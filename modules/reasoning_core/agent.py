@@ -167,35 +167,49 @@ def _generate_mock_proposal(constraints: CompiledConstraints, catalog: Dict[str,
 
                 if alt_prod:
                     alt_price_inr = alt_prod["price_paise"] / 100.0
+                    if running_total_paise + alt_prod["price_paise"] <= constraints.spend_limit.max_amount_paise:
+                        thought_steps.append(
+                            f"Found in-stock alternative brand: '{alt_prod['name']}' @ ₹{alt_price_inr:.2f}. "
+                            f"Selected as replacement for out-of-stock preferred brand."
+                        )
+                        selected_items.append({
+                            "product_id": alt_pid,
+                            "product_name": alt_prod["name"],
+                            "merchant_id": merchant_id,
+                            "offer_price_paise": alt_prod["price_paise"],
+                            "quantity": 1,
+                            "currency": "INR",
+                            "category": "groceries",
+                        })
+                        running_total_paise += alt_prod["price_paise"]
+                    else:
+                        thought_steps.append(
+                            f"Item #{idx} ({slot_name}): Alternative brand '{alt_prod['name']}' @ ₹{alt_price_inr:.2f} "
+                            f"exceeds remaining budget of ₹{(constraints.spend_limit.max_amount_paise - running_total_paise) / 100.0:.2f}. "
+                            f"Skipping to strictly enforce budget ceiling."
+                        )
+            elif target_prod and target_prod.get("in_stock", True):
+                price_inr = target_prod["price_paise"] / 100.0
+                if running_total_paise + target_prod["price_paise"] <= constraints.spend_limit.max_amount_paise:
                     thought_steps.append(
-                        f"Found in-stock alternative brand: '{alt_prod['name']}' @ ₹{alt_price_inr:.2f}. "
-                        f"Selected as replacement for out-of-stock preferred brand."
+                        f"Item #{idx} ({slot_name}): Found preferred brand '{target_prod['name']}' @ ₹{price_inr:.2f} (In Stock). Added to basket."
                     )
                     selected_items.append({
-                        "product_id": alt_pid,
-                        "product_name": alt_prod["name"],
+                        "product_id": target_pid,
+                        "product_name": target_prod["name"],
                         "merchant_id": merchant_id,
-                        "offer_price_paise": alt_prod["price_paise"],
+                        "offer_price_paise": target_prod["price_paise"],
                         "quantity": 1,
                         "currency": "INR",
                         "category": "groceries",
                     })
-                    running_total_paise += alt_prod["price_paise"]
-            elif target_prod and target_prod.get("in_stock", True):
-                price_inr = target_prod["price_paise"] / 100.0
-                thought_steps.append(
-                    f"Item #{idx} ({slot_name}): Found preferred brand '{target_prod['name']}' @ ₹{price_inr:.2f} (In Stock). Added to basket."
-                )
-                selected_items.append({
-                    "product_id": target_pid,
-                    "product_name": target_prod["name"],
-                    "merchant_id": merchant_id,
-                    "offer_price_paise": target_prod["price_paise"],
-                    "quantity": 1,
-                    "currency": "INR",
-                    "category": "groceries",
-                })
-                running_total_paise += target_prod["price_paise"]
+                    running_total_paise += target_prod["price_paise"]
+                else:
+                    thought_steps.append(
+                        f"Item #{idx} ({slot_name}): Preferred brand '{target_prod['name']}' @ ₹{price_inr:.2f} "
+                        f"exceeds remaining budget of ₹{(constraints.spend_limit.max_amount_paise - running_total_paise) / 100.0:.2f}. "
+                        f"Skipping to strictly enforce budget ceiling."
+                    )
 
         total_inr = running_total_paise / 100.0
         thought_steps.append(
@@ -502,6 +516,16 @@ def _generate_mock_proposal(constraints: CompiledConstraints, catalog: Dict[str,
 
 def _clean_and_parse_json(text: str) -> Dict[str, Any]:
     clean = text.strip()
+    # 1. Try regex markdown block extraction
+    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", clean, re.DOTALL)
+    if m:
+        return json.loads(m.group(1).strip())
+    # 2. Try boundary brace extraction
+    first_brace = clean.find("{")
+    last_brace = clean.rfind("}")
+    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+        return json.loads(clean[first_brace : last_brace + 1].strip())
+    # 3. Direct strip fallback
     if clean.startswith("```json"):
         clean = clean[7:]
     if clean.startswith("```"):
@@ -579,7 +603,7 @@ def _post_process_proposal(
 def _generate_gemini_proposal(
     constraints: CompiledConstraints,
     catalog: Dict[str, Any],
-    model: str = "gemini-3.6-flash",
+    model: str = "gemini-2.0-flash",
 ) -> Tuple[Dict[str, Any], List[str], str]:
     """Call Google Gemini API for structured proposal generation."""
     from google import genai
@@ -592,7 +616,7 @@ def _generate_gemini_proposal(
     system_prompt = _build_system_prompt()
     user_prompt = _build_user_prompt(constraints, catalog)
 
-    candidates = [model, "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.0-flash"]
+    candidates = [model, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
     response = None
     used_model = model
     last_err = None
@@ -626,7 +650,7 @@ def _generate_gemini_proposal(
 def _generate_groq_proposal(
     constraints: CompiledConstraints,
     catalog: Dict[str, Any],
-    model: str = "openai/gpt-oss-20b",
+    model: str = "llama-3.3-70b-versatile",
 ) -> Tuple[Dict[str, Any], List[str], str]:
     """Call Groq API (ultra-fast, high token limit) for structured proposal generation."""
     groq_key = os.environ.get("GROQ_API_KEY", "")
@@ -636,7 +660,7 @@ def _generate_groq_proposal(
     system_prompt = _build_system_prompt()
     user_prompt = _build_user_prompt(constraints, catalog)
 
-    candidates = [model, "openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.6-27b"]
+    candidates = [model, "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
     data = None
     used_model = model
     last_err = None

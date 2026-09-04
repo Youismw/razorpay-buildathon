@@ -36,6 +36,16 @@ def enforce_policy(
     violations: List[PolicyViolation] = []
     now = datetime.datetime.now(datetime.timezone.utc)
 
+    # --- CHECK 0: Proposal must contain at least one item (Bug 41) ---
+    if not proposal.items or len(proposal.items) == 0:
+        violations.append(PolicyViolation(
+            code="EMPTY_PROPOSAL",
+            message="Proposal contains zero items to purchase",
+            field="items",
+            actual_value=0,
+            allowed_value=">= 1",
+        ))
+
     # --- CHECK 1: Total spend must not exceed max_spend (INV-010) ---
     if proposal.total_price_paise > constraints.spend_limit.max_amount_paise:
         violations.append(PolicyViolation(
@@ -79,10 +89,11 @@ def enforce_policy(
                     allowed_value=constraints.merchant_scope.allowed_merchants,
                 ))
 
-    # --- CHECK 4: Category blocklist ---
+    # --- CHECK 4: Category blocklist (case-insensitive) (Bug 40) ---
     if constraints.merchant_scope.category_blocklist:
+        normalized_blocklist = {cat.lower() for cat in constraints.merchant_scope.category_blocklist}
         for i, item in enumerate(proposal.items):
-            if item.category and item.category in constraints.merchant_scope.category_blocklist:
+            if item.category and item.category.lower() in normalized_blocklist:
                 violations.append(PolicyViolation(
                     code="CATEGORY_BLOCKED",
                     message=f"Category '{item.category}' is in the blocklist",
@@ -91,9 +102,11 @@ def enforce_policy(
                     allowed_value=f"Not in {constraints.merchant_scope.category_blocklist}",
                 ))
 
-    # --- CHECK 5: Validity window ---
+    # --- CHECK 5: Validity window (timezone-safe) (Bug 39) ---
     try:
         valid_until = datetime.datetime.fromisoformat(constraints.validity_window.valid_until_iso)
+        if valid_until.tzinfo is None:
+            valid_until = valid_until.replace(tzinfo=datetime.timezone.utc)
         if now > valid_until:
             violations.append(PolicyViolation(
                 code="VALIDITY_EXPIRED",

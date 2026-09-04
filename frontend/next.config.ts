@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
         destination: `${backendUrl}/api/:path*`,
       },
       {
+        source: "/buy",
+        destination: `${backendUrl}/buy`,
+      },
+      {
         source: "/buy/:path*",
         destination: `${backendUrl}/buy/:path*`,
       },

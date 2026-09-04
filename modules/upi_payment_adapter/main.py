@@ -42,6 +42,7 @@ class ChargeRequest(BaseModel):
     token_id: str = Field(default="tok_demo_placeholder")
     description: str = Field(default="AP2 Mandate Debit")
     constraint_hash: Optional[str] = None
+    customer_id: Optional[str] = None
 
 
 class ChargeResponse(BaseModel):
@@ -161,6 +162,7 @@ def charge_mandate(req: ChargeRequest):
         token_id=req.token_id,
         amount_paise=req.amount_paise,
         description=req.description,
+        customer_id=req.customer_id or os.environ.get("RAZORPAY_CUSTOMER_ID", "cust_ap2_buyer"),
     ))
 
     final_status = "SUCCESS" if payment_result.success else "FAILED"
@@ -173,7 +175,20 @@ def charge_mandate(req: ChargeRequest):
     )
 
     if payment_result.success:
-        _revocation_engine.mark_settled(req.mandate_id)
+        try:
+            _revocation_engine.mark_settled(req.mandate_id)
+        except MandateRevocationError as e:
+            _idempotency_store.update_status(
+                req.mandate_id,
+                req.idempotency_key,
+                "FAILED",
+                razorpay_payment_id=payment_result.razorpay_payment_id,
+                razorpay_order_id=order_result.razorpay_order_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e),
+            )
 
     return ChargeResponse(
         success=payment_result.success,

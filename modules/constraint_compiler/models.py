@@ -60,6 +60,7 @@ class CompileRequest(BaseModel):
     allowed_merchants: Optional[List[str]] = Field(default=None, description="Optional merchant allowlist override")
     category_blocklist: Optional[List[str]] = Field(default=None, description="Optional category blocklist override")
     validity_hours: Optional[int] = Field(default=24, gt=0, le=720, description="Validity window in hours (max 30 days)")
+    quantity: Optional[int] = Field(default=None, ge=1, description="Optional explicit quantity override")
 
 
 class CompileResponse(BaseModel):

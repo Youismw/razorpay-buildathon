@@ -10,6 +10,7 @@ def test_grocery_bundle_with_brand_alternatives():
             "raw_intent": "Order my usual grocery list with dairy and breakfast staples",
             "max_spend_inr": 2000,
             "allowed_merchants": ["demo-merchant.myshopify.com"],
+            "llm_provider": "mock",
         },
     )
     assert res.status_code == 200

@@ -22,9 +22,10 @@ _INJECTION_PATTERNS: List[re.Pattern] = [
     re.compile(r"(?i)\b(system\s*prompt\s*:)\b"),
     re.compile(r"(?i)\b(override\s+(all\s+)?(safety|security|rules?|constraints?))\b"),
     # Role injection
-    re.compile(r"(?i)\b(act\s+as\s+(a\s+)?)\b"),
-    re.compile(r"(?i)\b(pretend\s+(to\s+be|you\s+are))\b"),
-    re.compile(r"(?i)\b(roleplay\s+as)\b"),
+    re.compile(r"(?i)\b(act\s+as\s+(an?\s+)?(?:unregulated|unrestricted|uncensored|malicious|evil|system|developer|root|admin|dan|jailbreak|bot|assistant))\b"),
+    re.compile(r"(?i)\b(act\s+as\s+if\s+you\s+(?:have\s+no|don'?t\s+have)\s+(?:rules|constraints|limits))\b"),
+    re.compile(r"(?i)\b(pretend\s+(to\s+be|you\s+are)\s+(an?\s+)?(?:unregulated|unrestricted|uncensored|malicious|evil|system|developer|root|admin|dan|jailbreak|bot))\b"),
+    re.compile(r"(?i)\b(roleplay\s+as\s+(an?\s+)?(?:unregulated|unrestricted|uncensored|malicious|evil|system|developer|root|admin|dan|jailbreak|bot))\b"),
     # Data exfiltration
     re.compile(r"(?i)\b(reveal\s+(your\s+)?(system|secret|api|key|password|prompt))\b"),
     re.compile(r"(?i)\b(output\s+(your\s+)?(system|secret|api|key|password|prompt))\b"),
@@ -47,11 +48,15 @@ _DELIMITER_PATTERNS: List[re.Pattern] = [
 
 def normalize_unicode(text: str) -> str:
     """Apply Unicode NFKC normalization to collapse homoglyphs and special chars."""
+    if not text:
+        return ""
     return unicodedata.normalize("NFKC", text)
 
 
 def strip_injection_patterns(text: str) -> str:
     """Remove known prompt injection patterns from text."""
+    if not text:
+        return ""
     sanitized = text
     for pattern in _INJECTION_PATTERNS:
         sanitized = pattern.sub("[SANITIZED]", sanitized)
@@ -60,6 +65,8 @@ def strip_injection_patterns(text: str) -> str:
 
 def neutralize_delimiters(text: str) -> str:
     """Neutralize structural delimiters that could break LLM context boundaries."""
+    if not text:
+        return ""
     sanitized = text
     for pattern in _DELIMITER_PATTERNS:
         sanitized = pattern.sub("[DELIM]", sanitized)
@@ -71,6 +78,9 @@ def sanitize_for_llm(text: str) -> str:
     Full sanitization pipeline (SEC-PI-001).
     Order: Unicode NFKC → Delimiter Neutralization → Injection Pattern Stripping.
     """
+    if not text:
+        return ""
+
     # Step 1: Unicode normalization
     text = normalize_unicode(text)
 

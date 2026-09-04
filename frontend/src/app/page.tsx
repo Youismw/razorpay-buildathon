@@ -244,21 +244,29 @@ function AppContent() {
 
   const handleExecute = useCallback(
     (req: BuyRequest) => {
+      const reqWithIdemp: BuyRequest = {
+        ...req,
+        idempotency_key: req.idempotency_key || `idemp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      };
       // If PIN confirmation is required, prompt user before executing settlement
       if (profile.autonomyMode === "pin_required" && !req.simulate_failure_stage) {
-        setPendingReq(req);
+        setPendingReq(reqWithIdemp);
         setIsPinModalOpen(true);
       } else {
-        executePipelineStream(req);
+        executePipelineStream(reqWithIdemp);
       }
     },
     [profile.autonomyMode, executePipelineStream]
   );
 
-  const handlePinSuccess = () => {
+  const handlePinSuccess = (enteredPin: string) => {
     setIsPinModalOpen(false);
     if (pendingReq) {
-      executePipelineStream(pendingReq);
+      const authedReq: BuyRequest = {
+        ...pendingReq,
+        pin: enteredPin,
+      };
+      executePipelineStream(authedReq);
       setPendingReq(null);
     }
   };
@@ -279,7 +287,7 @@ function AppContent() {
         max_spend_inr: profile.maxTransactionLimitInr,
         allowed_merchants: [merchantId],
         validity_hours: 24,
-        llm_provider: "mock",
+        llm_provider: "auto",
       });
     },
     [handleExecute, profile.maxTransactionLimitInr]

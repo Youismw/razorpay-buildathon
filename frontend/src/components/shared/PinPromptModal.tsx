@@ -8,7 +8,7 @@ interface PinPromptModalProps {
   expectedPin: string;
   totalAmountInr: number;
   rawIntent: string;
-  onSuccess: () => void;
+  onSuccess: (enteredPin: string) => void;
   onCancel: () => void;
 }
 
@@ -36,7 +36,7 @@ export const PinPromptModal: React.FC<PinPromptModalProps> = ({
     e.preventDefault();
     if (pin === expectedPin) {
       setError(false);
-      onSuccess();
+      onSuccess(pin);
     } else {
       setError(true);
       setPin("");

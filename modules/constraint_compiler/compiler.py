@@ -20,11 +20,11 @@ from modules.constraint_compiler.models import (
 from modules.ledger.writer import canonicalize_json, compute_sha256
 
 
-# Common INR amount patterns
+# Common INR amount patterns (supports decimals e.g. 499.50)
 _AMOUNT_PATTERNS = [
-    r"(?:under|below|less than|max|maximum|upto|up to|within|budget)\s*(?:rs\.?|₹|inr)?\s*(\d[\d,]*)",
-    r"(?:rs\.?|₹|inr)\s*(\d[\d,]*)",
-    r"(\d[\d,]*)\s*(?:rs\.?|₹|inr|rupees|rupee)",
+    r"(?:under|below|less than|max|maximum|upto|up to|within|budget)\s*(?:rs\.?|₹|inr)?\s*(\d[\d,]*(?:\.\d{1,2})?)",
+    r"(?:rs\.?|₹|inr)\s*(\d[\d,]*(?:\.\d{1,2})?)",
+    r"(\d[\d,]*(?:\.\d{1,2})?)\s*(?:rs\.?|₹|inr|rupees|rupee)",
 ]
 
 # Common product keywords to strip when extracting the product query
@@ -49,11 +49,36 @@ def extract_amount_from_intent(raw_intent: str) -> Optional[int]:
     return None
 
 
+def extract_quantity_from_intent(raw_intent: str) -> int:
+    """Extract item quantity if specified in natural language (e.g. '2 units', '3 bottles', 'buy 2 headphones')."""
+    text = raw_intent.strip()
+    m = re.search(r"\b(\d+)\s*(?:units?|items?|packs?|pcs?|pieces?|bottles?|pairs?|boxes?)\b", text, re.IGNORECASE)
+    if m:
+        try:
+            val = int(m.group(1))
+            if val > 0:
+                return val
+        except ValueError:
+            pass
+    m2 = re.search(r"\b(?:buy|order|get|purchase)\s+(\d+)\s+(?:of\s+)?([a-zA-Z]+)", text, re.IGNORECASE)
+    if m2:
+        try:
+            val = int(m2.group(1))
+            if val > 0:
+                return val
+        except ValueError:
+            pass
+    return 1
+
+
 def extract_product_query(raw_intent: str) -> str:
     """Extract the product search query by stripping intent prefixes and amount clauses."""
     text = raw_intent.strip()
     for prefix in _INTENT_PREFIXES:
         text = re.sub(prefix, "", text, flags=re.IGNORECASE).strip()
+    # Remove quantity clauses
+    text = re.sub(r"^\d+\s*(?:units?|items?|packs?|pcs?|pieces?|bottles?|pairs?|boxes?)\s+(?:of\s+)?", "", text, flags=re.IGNORECASE).strip()
+    text = re.sub(r"^\d+\s+(?:of\s+)?", "", text, flags=re.IGNORECASE).strip()
     # Remove amount clauses
     for pattern in _AMOUNT_PATTERNS:
         text = re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
@@ -95,10 +120,16 @@ def compile_intent(req: CompileRequest) -> Tuple[CompiledConstraints, str, str]:
         validity_window_hours=validity_hours,
     )
 
-    # 4. Product query extraction
+    # 4. Quantity extraction (Bug 34)
+    if getattr(req, "quantity", None) is not None:
+        target_quantity = req.quantity
+    else:
+        target_quantity = extract_quantity_from_intent(req.raw_intent)
+
+    # 5. Product query extraction
     product_query = extract_product_query(req.raw_intent)
 
-    # 5. Build CompiledConstraints (hard constraints only, soft preferences empty for Thread 0)
+    # 6. Build CompiledConstraints (hard constraints only, soft preferences empty for Thread 0)
     compiled = CompiledConstraints(
         intent_id=intent_id,
         raw_intent=req.raw_intent,
@@ -106,7 +137,7 @@ def compile_intent(req: CompileRequest) -> Tuple[CompiledConstraints, str, str]:
         merchant_scope=merchant_scope,
         validity_window=validity_window,
         product_query=product_query,
-        quantity=1,
+        quantity=target_quantity,
         soft_preferences=[],
         compiled_at_iso=now.isoformat(),
     )
