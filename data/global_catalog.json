@@ -167,7 +167,7 @@
         "price_paise": 8500,
         "category": "groceries",
         "in_stock": true,
-        "stock": 13
+        "stock": 12
       },
       "PROD-MILK-NANDINI": {
         "name": "Nandini Special Pasteurized Milk (1L)",
@@ -246,7 +246,7 @@
         "price_paise": 4800,
         "category": "groceries",
         "in_stock": true,
-        "stock": 5
+        "stock": 4
       },
       "PROD-SONY-WH-CH520-WIRELE": {
         "name": "Sony WH-CH520 Wireless Headphones",
@@ -677,7 +677,7 @@
         "price_paise": 460800,
         "category": "electronics",
         "in_stock": true,
-        "stock": 40,
+        "stock": 37,
         "supplier_cost_paise": 360000
       },
       "PROD-AMUL-TAAZA-HOM-44D42C": {
@@ -727,6 +727,54 @@
         "in_stock": true,
         "stock": 10,
         "supplier_cost_paise": 60000
+      },
+      "PROD-SONY-WH-CH520--798F69": {
+        "name": "Sony WH-CH520 Wireless Headphones",
+        "price_paise": 460800,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 42,
+        "supplier_cost_paise": 360000
+      },
+      "PROD-AMUL-TAAZA-HOM-1C7D9F": {
+        "name": "Amul Taaza Homogenised Toned Milk (1L)",
+        "price_paise": 6925,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 120,
+        "supplier_cost_paise": 5800
+      },
+      "PROD-BLUE-TOKAI-ATT-4EA78F": {
+        "name": "Blue Tokai Attikan Dark Roast (250g)",
+        "price_paise": 42834,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 28,
+        "supplier_cost_paise": 33000
+      },
+      "PROD-EBF016": {
+        "name": "Bose QuietComfort 45 Noise Canceling Headphones",
+        "price_paise": 2499900,
+        "category": "electronics",
+        "in_stock": true,
+        "stock": 9,
+        "supplier_cost_paise": 1850000
+      },
+      "PROD-ORGANIC-COLD-P-A2DDE4": {
+        "name": "ORGANIC COLD PRESSED APPLE JUICE 500ML",
+        "price_paise": 15000,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 20,
+        "supplier_cost_paise": 12000
+      },
+      "PROD-ORGANIC-COLD-P-AD6651": {
+        "name": "ORGANIC COLD PRESSED APPLE JUICE 1000ML",
+        "price_paise": 25000,
+        "category": "groceries",
+        "in_stock": true,
+        "stock": 20,
+        "supplier_cost_paise": 20000
       }
     }
   }

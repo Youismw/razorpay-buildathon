@@ -9,6 +9,7 @@ Endpoints:
   GET  /v1/adapter/mandate/:id — Query mandate state
 """
 
+import os
 import json
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Request, status

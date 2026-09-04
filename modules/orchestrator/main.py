@@ -815,12 +815,14 @@ def seller_agent_chat(req: SellerChatRequest):
                     product_category=prod_cat,
                 ):
                     ai_reply = f"I cannot update the price of '{p_item.get('name')}' because it is not sold by your store."
-                    return SellerChatResponse(
-                        reply=ai_reply,
-                        action_type="chat",
-                        merchant_id=req.merchant_id,
-                        business_type=req.business_type,
-                    )
+                    return {
+                        "status": "UNAUTHORIZED",
+                        "action_type": "message",
+                        "reply_text": ai_reply,
+                        "added_product": None,
+                        "competitor_scan": None,
+                        "updated_product": None,
+                    }
                 p_item["price_paise"] = int(new_price * 100)
                 add_or_update_product(req.merchant_id, target_pid, p_item)
                 save_catalog_to_disk()
