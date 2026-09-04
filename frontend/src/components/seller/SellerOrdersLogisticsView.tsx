@@ -36,7 +36,13 @@ export const SellerOrdersLogisticsView: React.FC<SellerOrdersLogisticsViewProps>
         .then((res) => res.json())
         .then((data) => {
           if (isMounted && data.orders) {
-            setOrders(data.orders);
+            const seen = new Set<string>();
+            const uniqueOrders = (data.orders as SellerOrder[]).filter((o) => {
+              if (!o.order_id || seen.has(o.order_id)) return false;
+              seen.add(o.order_id);
+              return true;
+            });
+            setOrders(uniqueOrders);
           }
         })
         .catch(() => {});
@@ -122,14 +128,14 @@ export const SellerOrdersLogisticsView: React.FC<SellerOrdersLogisticsViewProps>
 
       {/* Orders Grid */}
       <div className="space-y-3">
-        {filteredOrders.map((order) => {
+        {filteredOrders.map((order, idx) => {
           const isDelivered = order.order_status === "DELIVERED";
           const isFailed = order.order_status === "FAILED";
           const isDispatched = order.order_status === "DISPATCHED";
 
           return (
             <div
-              key={order.order_id}
+              key={`${order.order_id}-${idx}`}
               className="card p-5 hover:border-[rgba(92,61,46,0.3)] transition-all space-y-4"
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[rgba(92,61,46,0.06)] pb-3">

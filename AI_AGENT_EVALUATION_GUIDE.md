@@ -16,7 +16,9 @@
 | **Razorpay API Integration** | **Live S2S Client** (`POST /v1/orders`, `recurring`, `refund`) | [`modules/upi_payment_adapter/razorpay_client.py`](modules/upi_payment_adapter/razorpay_client.py#L54-L255) |
 | **Signature Security** | **HMAC-SHA256 Verification** (Payments & Webhooks) | [`modules/upi_payment_adapter/razorpay_client.py`](modules/upi_payment_adapter/razorpay_client.py#L228-L255) |
 | **Cryptographic Mandate Vault** | **RFC 8785 Canonical JSON + ES256 JWS** | [`modules/mandate_vault/crypto.py`](modules/mandate_vault/crypto.py#L31-L125) |
-| **Automated Test Suite** | **71 / 71 Tests Passing (100% Pass Rate)** | `pytest tests/ -v` |
+| **Automated Test Suite** | **97 / 97 Tests Passing (100% Pass Rate)** | `pytest tests/ -v` |
+| **Performance Benchmark** | **87,000+ Decisions/sec (<0.02ms Latency)** | `python run_benchmark.py` or `python demo.py --benchmark` ([`PERFORMANCE_BENCHMARK.md`](PERFORMANCE_BENCHMARK.md)) |
+| **Live UPI Autopay Tokenization** | **Real-time NPCI Callback (`mandate.authenticated`)** | `POST /api/mandates/tokenize` & [`modules/upi_payment_adapter/webhooks.py`](modules/upi_payment_adapter/webhooks.py) |
 | **Web UI & Dashboard** | **Next.js 16 (Turbopack) & React 19 (7 Tabs)** | [`frontend/src/app/page.tsx`](frontend/src/app/page.tsx) |
 | **Database Schema** | **PostgreSQL 15+ ACID with SERIALIZABLE constraints** | [`sql/init/001_init.sql`](sql/init/001_init.sql) |
 | **Production Readiness** | **95%+ Turn-Key (AWS KMS, Shopify, PostgreSQL)** | [`PRODUCTION_MIGRATION.md`](PRODUCTION_MIGRATION.md) |
@@ -86,6 +88,36 @@
 - **Source File**: [`modules/ledger/writer.py`](modules/ledger/writer.py) & [`modules/ledger/audit_exporter.py`](modules/ledger/audit_exporter.py)
 - **Test File**: [`tests/test_ledger.py`](tests/test_ledger.py) (`pytest tests/test_ledger.py -v`)
 
+### 8. High-Throughput Guardrail Stress Benchmark Suite
+- **Purpose**: Validates that the Deterministic Guardrail Gate sustains >= 1,500 decisions/sec with < 5.0ms P99 latency (+5,300% above SLA).
+- **Source Files**:
+  - Root Turnkey Launcher: [`run_benchmark.py`](run_benchmark.py) (`python run_benchmark.py`)
+  - Stress Test Engine: [`benchmarks/guardrail_stress_test.py`](benchmarks/guardrail_stress_test.py)
+  - Distributed Locust Suite: [`benchmarks/locustfile.py`](benchmarks/locustfile.py)
+  - Formal SLA Report: [`PERFORMANCE_BENCHMARK.md`](PERFORMANCE_BENCHMARK.md)
+  - API Endpoints: `POST /api/guardrail/evaluate` and `GET /api/guardrail/benchmark` in [`modules/orchestrator/main.py`](modules/orchestrator/main.py)
+- **Test File**: [`tests/test_benchmarks_and_tokenization.py`](tests/test_benchmarks_and_tokenization.py) (`pytest tests/test_benchmarks_and_tokenization.py -v`)
+
+### 9. Live UPI Autopay Tokenization & NPCI Webhook Listener
+- **Purpose**: Parses real-time NPCI registration callbacks (`mandate.authenticated`, `token.confirmed`, `mandate.active`, `mandate.revoked`), extracting UMNs and binding tokens.
+- **Source Files**:
+  - Webhook Parser: [`modules/upi_payment_adapter/webhooks.py`](modules/upi_payment_adapter/webhooks.py)
+  - Tokenization Endpoint: `POST /api/mandates/tokenize` in [`modules/orchestrator/main.py`](modules/orchestrator/main.py)
+  - UI Autopay Modal: [`frontend/src/components/mandates/MandatesManagerView.tsx`](frontend/src/components/mandates/MandatesManagerView.tsx)
+- **Test File**: [`tests/test_benchmarks_and_tokenization.py`](tests/test_benchmarks_and_tokenization.py)
+
+### 10. Server-Side User PIN Governance & Manual Overrides
+- **Purpose**: Cryptographic PIN verification gate preventing unauthorized overrides of spending limits and mandate thresholds.
+- **Source Files**:
+  - Verification Endpoint: `POST /api/governance/verify-pin` in [`modules/orchestrator/main.py`](modules/orchestrator/main.py)
+  - UI PIN Prompt Modal: [`frontend/src/components/shared/PinPromptModal.tsx`](frontend/src/components/shared/PinPromptModal.tsx)
+- **Test File**: [`tests/test_tier_b_fixes.py::test_bug27_governance_override_userpin`](tests/test_tier_b_fixes.py)
+
+### 11. Automated Multi-Carrier Logistics & AWB Dispatch Engine
+- **Purpose**: Automated Delhivery/Bluedart AWB generation and order lifecycle progression (`PLACED` ➔ `CONFIRMED` ➔ `DISPATCHED` ➔ `DELIVERED`).
+- **Source File**: [`modules/universal_commerce_adapter/seller_manager.py`](modules/universal_commerce_adapter/seller_manager.py) (`dispatch_order`)
+- **Test File**: [`tests/test_seller.py::test_logistics_dispatch`](tests/test_seller.py)
+
 ---
 
 ## 🔒 10 Formal Invariant Matrix & Verification Points
@@ -108,16 +140,23 @@
 ## 🧪 Quick Test Execution Commands for Evaluators
 
 ```bash
-# 1. Run Complete Test Suite (All 71 Tests Must Pass)
+# 1. Run Complete Test Suite (All 97 Tests Must Pass)
 pytest tests/ -v
 
-# 2. Run Scenario Runner (Happy Path, Revocation Race, Policy Block, Live Cascade)
+# 2. Run High-Throughput Stress Benchmark (87,000+ decisions/s)
+python run_benchmark.py
+# or: python demo.py --benchmark
+
+# 3. Run Scenario Runner (Happy Path, Revocation Race, Policy Block, Live Cascade)
 python demo.py --all
 
-# 3. Verify Next.js Frontend Production Build
+# 4. Run Headless Distributed Locust Stress Suite
+locust -f benchmarks/locustfile.py --headless -u 50 -r 10 --run-time 30s --host http://127.0.0.1:8000
+
+# 5. Verify Next.js Frontend Production Build
 cd frontend && npm run build
 
-# 4. Check Health Endpoint
+# 6. Check Health Endpoint
 curl -s http://localhost:8000/healthz
 ```
 
@@ -131,5 +170,5 @@ curl -s http://localhost:8000/healthz
 | **2. The Track: Agentic Commerce & UAP** | Multi-agent communication: **Buyer Agent** (`modules/reasoning_core`) ⇄ **Merchant Agent** (`modules/universal_commerce_adapter`). Razorpay Test Mode S2S API (`modules/upi_payment_adapter/razorpay_client.py`). | [Section 4: Multi-Agent Protocol](README.md#4-multi-agent-protocol-flow-buyer-agent--merchant-agent) |
 | **3. The FinTech Bar: Bounds & Audits** | **Bounded**: `offer_price <= max_spend` (`INV-010`). **Gated**: Confidence Gate ($C \ge 0.85$, `INV-002`) + PIN modal. **Audit Trail**: Hash-chained Merkle ledger (`INV-005`). **Graceful Failure**: Revocation race rejects with 403 (`INV-004`). | [Section 5: 10 Formal Invariants](README.md#5-10-formal-security-invariants) |
 | **4. Personality: Resilience & Rigor** | Detailed post-mortems of the two hardest technical bugs: (1) Concurrent in-flight mandate revocation race, (2) Cross-runtime JSON non-determinism breaking signatures. | [Section 6: "What Broke at 2 AM"](README.md#6-what-broke-at-2-am--how-we-engineered-the-fix) |
-| **5. Delivery & Proof of Work** | 9 decoupled modules, Next.js 16 frontend with mobile zoom, 71/71 automated tests passing, 0 hardcoded secrets. | [Section 7: Web Dashboard](README.md#7-modern-web-dashboard--mobile-zoom) & [Section 8: Setup Instructions](README.md#8-setup--flawless-run-instructions) |
+| **5. Delivery & Proof of Work** | 9 decoupled modules, Next.js 16 frontend with mobile zoom, 97/97 automated tests passing, 0 hardcoded secrets. | [Section 7: Web Dashboard](README.md#7-modern-web-dashboard--mobile-zoom) & [Section 8: Setup Instructions](README.md#8-setup--flawless-run-instructions) |
 

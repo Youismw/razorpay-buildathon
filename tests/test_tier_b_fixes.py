@@ -6,6 +6,7 @@ logistics order progression, decimal pricing, and schema robustness.
 
 import os
 import json
+import uuid
 import pytest
 from fastapi.testclient import TestClient
 
@@ -136,10 +137,10 @@ def test_bug28_multi_merchant_grounding_composite_hash():
 
 def test_bug26_logistics_dispatch_order_state_progression():
     """Bug 26: dispatch_order_logistics must update order status to DISPATCHED and attach dispatch record."""
-    test_ord_id = "ORD-TEST-DISP-99"
+    test_ord_id = f"ORD-TEST-DISP-{uuid.uuid4().hex[:6].upper()}"
     test_order = SellerOrder(
         order_id=test_ord_id,
-        trace_id="trace-test-disp-99",
+        trace_id=f"trace-{test_ord_id.lower()}",
         timestamp="2026-09-04T12:00:00Z",
         product_id="PROD-WH-CH520",
         product_name="Sony WH-CH520 Headphones",

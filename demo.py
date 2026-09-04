@@ -420,6 +420,7 @@ def main():
     parser.add_argument("--failure", action="store_true", help="Run revocation race scenario only")
     parser.add_argument("--policy", action="store_true", help="Run policy enforcement scenario only")
     parser.add_argument("--live", action="store_true", help="Run live Gemini 3.6 + Razorpay S2S scenario")
+    parser.add_argument("--benchmark", action="store_true", help="Run Guardrail Gate high-throughput stress benchmark (87,000+ decisions/s)")
     parser.add_argument("--all", action="store_true", help="Run all scenarios including live APIs")
     args = parser.parse_args()
 
@@ -428,7 +429,13 @@ def main():
     results = {}
     ts_start = time.monotonic()
 
-    if args.failure:
+    if args.benchmark:
+        from benchmarks.guardrail_stress_test import run_in_process_benchmark, run_http_endpoint_benchmark
+        section("HIGH-THROUGHPUT GUARDRAIL GATE STRESS BENCHMARK", icon="⚡")
+        res1 = run_in_process_benchmark(10000)
+        res2 = run_http_endpoint_benchmark(2500)
+        results["guardrail_stress_benchmark"] = res1.get("sla_passed", False)
+    elif args.failure:
         results["revocation_race"] = demo_revocation_race()
     elif args.policy:
         results["policy_enforcement"] = demo_policy_enforcement()

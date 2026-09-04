@@ -577,14 +577,20 @@ def save_orders_to_disk() -> None:
 
 
 def load_orders_from_disk() -> None:
-    """Load saved seller orders from persistent disk storage."""
+    """Load saved seller orders from persistent disk storage with order_id deduplication."""
     global LIVE_SELLER_ORDERS
     try:
         if os.path.exists(ORDERS_FILE_PATH):
             with open(ORDERS_FILE_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list) and len(data) > 0:
-                    loaded = [SellerOrder(**item) for item in data]
+                    seen_ids = set()
+                    loaded = []
+                    for item in data:
+                        oid = item.get("order_id")
+                        if oid and oid not in seen_ids:
+                            seen_ids.add(oid)
+                            loaded.append(SellerOrder(**item))
                     LIVE_SELLER_ORDERS.clear()
                     LIVE_SELLER_ORDERS.extend(loaded)
     except Exception as e:
@@ -596,7 +602,12 @@ load_orders_from_disk()
 
 
 def record_seller_order(order: SellerOrder) -> SellerOrder:
-    """Record a newly settled buyer order into the merchant's live order ledger."""
+    """Record a newly settled buyer order into the merchant's live order ledger, updating in-place if order_id exists."""
+    for idx, existing in enumerate(LIVE_SELLER_ORDERS):
+        if existing.order_id == order.order_id:
+            LIVE_SELLER_ORDERS[idx] = order
+            save_orders_to_disk()
+            return order
     LIVE_SELLER_ORDERS.insert(0, order)
     save_orders_to_disk()
     return order
