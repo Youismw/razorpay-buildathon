@@ -120,7 +120,10 @@ razorpay-buildathon/
 │   ├── upi_payment_adapter/        # Stage 5: Razorpay UPI Autopay S2S + Idempotency + Revocation
 │   ├── universal_commerce_adapter/ # Merchant Core: Multi-channel models, Shopify GraphQL, ONDC Beckn
 │   ├── ledger/                     # Stage 5: Append-only hash-chained audit ledger
-│   ├── orchestrator/               # Central FastAPI Coordinator (POST /buy, SSE streaming)
+│   ├── orchestrator/               # Central FastAPI Coordinator (Steel Thread)
+│   │   ├── routes/                 # Modular APIRouters (catalog.py, stream.py)
+│   │   ├── state.py                # Centralized singletons, shared state & catalog versioning
+│   │   └── models.py               # Shared Pydantic request/response schemas
 │   └── sanitizer/                  # SEC-PI-001: Prompt injection defense
 ├── sql/init/                       # PostgreSQL 15 DDL Schema (001_init.sql)
 ├── tests/                          # 97 Automated Tests across Unit, Integration & E2E (100% Passing)
