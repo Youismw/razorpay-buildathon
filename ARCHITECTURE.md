@@ -1,93 +1,141 @@
-# Architecture Document
+# Architecture Specification: Agentic UPI Commerce Bridge
 
-## Agentic UPI Commerce Bridge — AP2/UCP × Razorpay UPI Autopay
-
-### Version: 1.0 (Thread 0 — Steel Demo)
-### Track: AI Growth & Agentic Commerce
+## AP2/UCP × Razorpay UPI Autopay — Governed Agentic Commerce
+**Track:** AI Growth & Agentic Commerce | **Version:** 2.0 (Production Scaffolded)
 
 ---
 
-## 1. Core Design Principle: Deterministic Sandwich
+## 1. Core Architectural Principle: The Deterministic Sandwich
 
-The system follows a **Deterministic Sandwich Architecture** where probabilistic AI components (the LLM reasoning core) are sandwiched between deterministic, cryptographically verifiable layers:
+The system implements the **Deterministic Sandwich Architecture**, an architectural pattern where probabilistic AI reasoning (LLMs) is strictly isolated and enclosed between deterministic, cryptographically verifiable boundaries:
 
 ```
-   ┌─────────────────────────────────────────────┐
-   │         DETERMINISTIC INPUT LAYER            │
-   │  Constraint Compiler (RFC 8785 + SHA-256)    │
-   └──────────────────┬──────────────────────────┘
-                      │
-   ┌──────────────────▼──────────────────────────┐
-   │         PROBABILISTIC CORE                   │
-   │  LLM Reasoning (Gemini / Mock)               │
-   │  ⚠ ZERO trust — treated as adversarial       │
-   └──────────────────┬──────────────────────────┘
-                      │
-   ┌──────────────────▼──────────────────────────┐
-   │         DETERMINISTIC OUTPUT LAYER           │
-   │  Guardrail Shell → Mandate Vault → Adapter   │
-   │  Pure code enforcement, no LLM authority      │
-   └─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      DETERMINISTIC INPUT BOUNDARY                       │
+│  Constraint Compiler (RFC 8785 Canonical JSON + SHA-256 Digest)        │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │ (Canonical Constraint Digest)
+┌────────────────────────────────────▼────────────────────────────────────┐
+│                    PROBABILISTIC REASONING CORE                         │
+│  Multi-Provider Tiered Cascade: Groq ➔ Gemini 3.6 Flash ➔ OpenRouter    │
+│  ⚠ ZERO trust: Network-isolated, no private keys, no payment access    │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │ (Draft ProposalObject JSON)
+┌────────────────────────────────────▼────────────────────────────────────┐
+│                      DETERMINISTIC OUTPUT BOUNDARY                      │
+│  1. Guardrail Shell: Schema Validator + Policy Engine (INV-010)         │
+│  2. Grounding Oracle: Cryptographic Manifest Verification               │
+│  3. Confidence Gate: Multi-Factor Probabilistic Threshold (C ≥ 0.85)    │
+│  4. Mandate Vault: RFC 8785 + ES256 JWS Signing (INV-009)               │
+│  5. Settlement Engine: Razorpay S2S Autopay API + Atomic Revocation Lock │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Module Architecture
+## 2. End-to-End System Component Topology
 
 ```mermaid
 graph TB
-    subgraph "External"
-        BUYER["👤 Buyer Principal"]
-        RZP["🏦 Razorpay UPI Autopay API"]
-        MERCHANT["🏪 Merchant Catalog"]
+    subgraph "Clients"
+        WEB["💻 Next.js 16 Dashboard<br/>(7 Specialized Tabs)"]
+        MOB["📱 Mobile Touch Client<br/>(Pinch Zoom 0.5x-2.0x)"]
     end
 
-    subgraph "Orchestrator"
-        ORCH["POST /buy"]
+    subgraph "API Gateway & Orchestration"
+        ORCH["FastAPI Orchestrator<br/>POST /buy | SSE Streaming"]
     end
 
-    subgraph "Deterministic Input"
-        CC["Module 1<br/>Constraint Compiler<br/>RFC 8785 + SHA-256"]
+    subgraph "Stage 1: Constraint Compilation"
+        CC["Module 1: Constraint Compiler<br/>RFC 8785 + SHA-256"]
     end
 
-    subgraph "Probabilistic Core"
-        SAN["Sanitizer<br/>SEC-PI-001"]
-        RC["Module 2<br/>Reasoning Core<br/>Gemini / Mock"]
+    subgraph "Stage 2: Isolated Reasoning Core"
+        SAN["Sanitizer (SEC-PI-001)<br/>Unicode NFKC + Delimiters"]
+        RC["Module 2: Reasoning Core<br/>Tiered LLM Cascade"]
     end
 
-    subgraph "Deterministic Output"
-        GS["Module 4<br/>Guardrail Shell"]
-        MV["Module 5<br/>Mandate Vault<br/>ES256 JWS"]
-        UPA["Module 6<br/>UPI Payment Adapter"]
+    subgraph "Stage 3: Guardrail Shell"
+        SCHEMA["1. Schema Validator (Pydantic v2)"]
+        POLICY["2. Policy Engine (INV-010)"]
+        ORACLE["3. Grounding Oracle (Manifest Hash)"]
+        CONF["4. Confidence Gate (C ≥ 0.85)"]
     end
 
-    subgraph "Persistence"
-        PG["PostgreSQL 15<br/>8 Tables + RBAC"]
-        LED["Module 8<br/>Append-Only Ledger<br/>Hash-Chained"]
+    subgraph "Stage 4: Mandate Vault"
+        VAULT["Module 5: Mandate Vault<br/>ES256 JWS Cryptography"]
+        KMS["AWS CloudHSM / KMS Adapter<br/>(FIPS 140-2 Level 3)"]
+        SW_KEY["Software P-256 KeyManager<br/>(Local Sandbox)"]
     end
 
-    BUYER -->|NL Intent| ORCH
+    subgraph "Stage 5: Settlement & Ledger"
+        ADAPTER["Module 6: UPI Payment Adapter<br/>Idempotency + Revocation"]
+        RZP["🏦 Razorpay S2S API<br/>Orders, Recurring, Refunds"]
+        LEDGER["Module 8: Append-Only Ledger<br/>Hash-Chained Audit Trail"]
+        PG["PostgreSQL 15 Cluster<br/>(sql/init/001_init.sql)"]
+        SQLITE["SQLite WAL ACID Store<br/>(audit_logs/*.db)"]
+    end
+
+    subgraph "Universal Commerce Adapter"
+        UCA["Module 7: Commerce Adapter<br/>Dynamic Pricing & Logistics"]
+        SHOP["Shopify GraphQL Admin"]
+        ONDC["ONDC Beckn Gateway"]
+    end
+
+    WEB --> ORCH
+    MOB --> ORCH
     ORCH --> CC
-    CC -->|CompiledConstraints| SAN
+    CC --> SAN
     SAN --> RC
-    RC -->|ProposalObject| GS
-    GS -->|APPROVED| MV
-    GS -->|ESCALATED| BUYER
-    MV -->|Signed JWS| UPA
-    UPA -->|Recurring Charge| RZP
-    UPA -->|Webhook| LED
-    MERCHANT -->|UCP Manifest| GS
-
-    CC --> LED
-    GS --> LED
-    MV --> LED
-    UPA --> LED
-    LED --> PG
+    RC --> SCHEMA
+    SCHEMA --> POLICY
+    POLICY --> ORACLE
+    ORACLE --> CONF
+    CONF -->|APPROVED| VAULT
+    VAULT --> KMS
+    VAULT --> SW_KEY
+    VAULT --> ADAPTER
+    ADAPTER --> RZP
+    ADAPTER --> LEDGER
+    LEDGER --> PG
+    LEDGER --> SQLITE
+    ORACLE --> UCA
+    UCA --> SHOP
+    UCA --> ONDC
 ```
 
 ---
 
-## 3. Guardrail Shell Pipeline
+## 3. Frontend Architecture (Next.js 16 Turbopack)
+
+The user-facing application is built with **Next.js 16 (Turbopack), React 19, and Tailwind CSS / Vanilla CSS design tokens**:
+
+```
+frontend/src/
+├── app/
+│   ├── layout.tsx             # Root viewport metadata, fonts, theme provider
+│   ├── page.tsx               # Primary tab switcher & layout orchestrator
+│   └── globals.css            # Curated HSL color palette, dark mode, micro-animations
+├── components/
+│   ├── buyer/                 # Buyer Chat Assistant, Reasoning Visualizer, SSE listener
+│   ├── seller/                # Seller Co-Pilot, Competitor Scans, Dynamic Margin Presets
+│   ├── catalog/               # Universal Market Browser, "Buy with AI" intent generator
+│   ├── mandates/              # UPI Autopay lifecycle monitor, real-time revocation
+│   ├── security/              # Live Security Invariants explorer (INV-001 to INV-010)
+│   ├── profile/               # Spending limits, UPI handle, PIN management
+│   ├── advanced/              # Webhook simulator, raw JSONL log explorer, JWKS viewer
+│   └── shared/                # ZoomContainer (0.5x-2.0x pinch), PinPromptModal
+├── hooks/
+│   ├── useCardGlow.ts         # Mouse-following ambient lighting effects
+│   └── useTouchZoom.ts        # Cross-platform multi-touch gesture engine
+└── lib/
+    ├── api.ts                 # Type-safe API client for FastAPI backend
+    └── profileStore.ts        # Client state with LocalStorage persistence & PIN state
+```
+
+---
+
+## 4. Guardrail Shell Pipeline (Stage 3)
 
 The Guardrail Shell is the **single mandatory gate** (INV-002) between LLM output and any money-moving action:
 
@@ -103,140 +151,66 @@ graph LR
     end
 
     S1 -->|"valid"| S2
-    S1 -->|"invalid (2 retries)"| ESC1["ESCALATE"]
+    S1 -->|"invalid"| ESC1["ESCALATE<br/>SCHEMA_REJECTED"]
     S2 -->|"passed"| S3
-    S2 -->|"violated"| ESC2["ESCALATE<br/>INV-010"]
+    S2 -->|"violated"| ESC2["ESCALATE<br/>INV-010 Overspend"]
     S3 -->|"verified"| S4
-    S3 -->|"unverified"| ESC3["ESCALATE"]
+    S3 -->|"unverified"| ESC3["ESCALATE<br/>UNGROUNDED_PRODUCT"]
     S4 -->|"C ≥ 0.85"| APPROVED["✅ APPROVED<br/>→ Mandate Vault"]
-    S4 -->|"C < 0.85"| ESC4["ESCALATE<br/>→ HITL Payload"]
+    S4 -->|"C < 0.85"| ESC4["ESCALATE<br/>LOW_CONFIDENCE"]
 ```
 
 ### Confidence Score Formula
-
 ```
 C = 0.40 × S_logprob + 0.40 × S_grounding + 0.20 × S_schema
 ```
-
-- **S_logprob**: LLM log-probability or self-consistency score (MVP: 0.70 default)
-- **S_grounding**: 1.0 if all items verified against catalog, 0.0 otherwise
-- **S_schema**: 1.0 if schema valid, 0.0 otherwise
-- **Threshold**: C ≥ 0.85 → APPROVED; C < 0.85 → ESCALATED + HITL payload
-- **Policy override**: If Policy Engine rejects → C = 0.0 regardless of other scores
+- **S_logprob**: LLM log-probability or multi-provider consistency score (0.70 default).
+- **S_grounding**: 1.0 if all items verified against catalog manifest hash, 0.0 otherwise.
+- **S_schema**: 1.0 if schema passes strict validation (`extra="forbid"`), 0.0 otherwise.
+- **Threshold**: $C \ge 0.85 \implies \text{APPROVED}$; $C < 0.85 \implies \text{ESCALATED}$.
 
 ---
 
-## 4. Network Isolation (Docker Compose)
+## 5. Network Isolation & Security Boundaries
 
-```mermaid
-graph TB
-    subgraph "net-untrusted"
-        EXT["External Catalog Ingestion"]
-    end
+Enforced via [`docker-compose.yml`](file:///docker-compose.yml):
 
-    subgraph "net-llm (internal: true)"
-        LLM["Reasoning Core"]
-    end
-
-    subgraph "net-guardrail (internal: true)"
-        GRD["Guardrail Shell"]
-        REDIS["Redis 7"]
-    end
-
-    subgraph "net-signing (internal: true)"
-        VAULT["Mandate Vault"]
-    end
-
-    subgraph "net-settlement (egress allowed)"
-        ADAPTER["UPI Payment Adapter"]
-        RZP_API["→ Razorpay API"]
-    end
-
-    subgraph "net-ledger (internal: true)"
-        PG_DB["PostgreSQL 15"]
-        JAEGER["Jaeger UI :16686"]
-    end
-
-    LLM -.->|"❌ NO route"| VAULT
-    LLM -.->|"❌ NO route"| ADAPTER
-    GRD -->|"approved only"| VAULT
-    VAULT --> ADAPTER
-    ADAPTER --> RZP_API
-```
-
-**Critical boundary:** `net-llm` is `internal: true` — the LLM container has **no egress** to the signing network, settlement network, or external APIs. It can only receive sanitized prompts and return structured JSON.
-
----
-
-## 5. Data Flow: Mandate Lifecycle
-
-```mermaid
-stateDiagram-v2
-    [*] --> INTENT_RECORDED: Constraint Compiler
-    INTENT_RECORDED --> CART_APPROVED: Grounding verified
-    CART_APPROVED --> PAYMENT_PENDING_REGISTRATION: Vault signs JWS
-    PAYMENT_PENDING_REGISTRATION --> PAYMENT_ACTIVE: Razorpay token registered
-    PAYMENT_ACTIVE --> SETTLED: Payment captured (webhook)
-    PAYMENT_ACTIVE --> REVOKED: Buyer revocation (INV-004)
-    PAYMENT_ACTIVE --> EXPIRED: Validity window elapsed
-    REVOKED --> [*]
-    SETTLED --> [*]
-    EXPIRED --> [*]
-```
-
----
-
-## 6. Database Schema (PostgreSQL 15)
-
-| Table | Purpose | Security |
-|---|---|---|
-| `mandates` | Mandate lifecycle SSOT | `ledger_writer`: INSERT, UPDATE, SELECT |
-| `debits` | Idempotent debit records | UNIQUE on `(mandate_id, idempotency_key)` |
-| `audit_events` | Append-only hash-chained log | **No UPDATE/DELETE grants** |
-| `checkout_sessions` | UCP state machine | Locked via `locked_at` timestamp |
-| `a2a_tasks` | Agent-to-Agent task tracking | Status-indexed |
-| `vault_outbox` | Transactional outbox pattern | Indexed on unprocessed |
-| `revoked_keys` | Key revocation registry | Primary key on `kid` |
-| `constraint_enforcement_audit` | Protocol downgrade audit | **No UPDATE/DELETE grants** |
-
-### RBAC Roles
-
-- **`ledger_writer`**: INSERT + SELECT on audit tables, full CRUD on operational tables
-- **`guardrail_reader`**: SELECT only on mandates, debits, audit tables
-- **`adapter_reader`**: SELECT only on mandates, debits, audit tables
-
----
-
-## 7. Cryptographic Architecture
-
-### Key Partitioning (FR-MV-004)
-
-| Key | Algorithm | Purpose | Storage |
+| Network | Type | Purpose | Egress Allowed |
 |---|---|---|---|
-| `2026-08-ap2-1` | ES256 (P-256) | AP2 Payment Mandate signing | Software-backed [MVP] |
-| `2026-08-identity-1` | Ed25519 | Agent identity assertions | Software-backed [MVP] |
+| `net-untrusted` | Bridge | Ingestion of external merchant manifests | Inbound only |
+| `net-llm` | Bridge (`internal: true`) | AI Reasoning Core (Groq / Gemini) | **NO external egress** to vault, db, or payment |
+| `net-guardrail` | Bridge (`internal: true`) | Policy checks and Redis token bucket | Internal only |
+| `net-signing` | Bridge (`internal: true`) | Mandate Vault private key operations | **NO external egress**; reachable only by guardrail |
+| `net-settlement` | Bridge (`internal: false`) | Razorpay S2S API communication | **Outbound HTTPS only** to `api.razorpay.com` |
+| `net-ledger` | Bridge (`internal: true`) | PostgreSQL 15 and Jaeger telemetry | Internal only |
+
+---
+
+## 6. Cryptographic Architecture (Stage 4)
+
+### Dual-Signer Key Partitioning (FR-MV-004)
+- **`SoftwareVaultSigner`**: Uses local Elliptic Curve P-256 (`jwcrypto`) with separated keys (`ap2_key` for mandates, `identity_key` for agent DID).
+- **`AwsKmsVaultSigner`**: Plugs directly into AWS KMS / CloudHSM ECDSA P-256 key ARNs (**FIPS 140-2 Level 3**), ensuring private keys are never exposed to host memory.
 
 ### Signing Flow
-
-1. Payload canonicalized via **RFC 8785 (JCS)**
-2. SHA-256 hash computed and verified against expected hash
-3. **ES256 JWS** compact serialization via `jwcrypto`
-4. Algorithm allowlist enforced: only `ES256` accepted (no `alg: none`)
-5. Public keys exposed via `GET /.well-known/jwks.json`
+1. Payload serialized deterministically via **RFC 8785 JSON Canonicalization Scheme (JCS)**.
+2. Canonical SHA-256 hash computed and verified against constraint digest.
+3. Protected JWS header constructed with `{"alg": "ES256", "typ": "JWT", "kid": "..."}`.
+4. Algorithm allowlist strictly enforced: only `ES256` accepted; `alg: none` fails closed immediately.
+5. Public JWK set exposed at `GET /.well-known/jwks.json` for third-party verification.
 
 ---
 
-## 8. Security Boundaries
+## 7. Settlement & Race Safety (Stage 5)
 
-### What the LLM CAN do:
-- Receive sanitized product catalogs and buyer constraints
-- Generate structured `ProposalObject` JSON
-- Provide reasoning summaries
+### Idempotency Guarantee (`INV-003`)
+Every debit request requires a composite unique key `(mandate_id, idempotency_key)`.
+- Enforced at the database layer via `UNIQUE(mandate_id, idempotency_key)`.
+- Concurrent duplicate requests are rejected, returning the original cached transaction record without re-charging.
 
-### What the LLM CANNOT do:
-- Access private signing keys (INV-001)
-- Bypass the Guardrail Shell (INV-002)
-- Override spending limits (INV-010)
-- Directly call Razorpay APIs (network isolation)
-- Suppress or modify audit log entries (INV-005, INV-006)
-- Authorize payments (INV-008)
+### Atomic Revocation Race Priority (`INV-004`)
+If a buyer revokes a mandate while an autonomous debit is in-flight:
+1. Revocation acquires an atomic mutex lock on the mandate ID.
+2. The mandate state transitions to `REVOKED` in the database.
+3. When the in-flight debit attempts to acquire the lock, it observes `REVOKED` state and fails immediately with **HTTP 403 `MANDATE_REVOKED`**.
+4. **Zero money is transferred.**

@@ -219,7 +219,12 @@ def test_seller_inventory_authorization_and_category_scoping():
 
 
 def test_pack_size_does_not_inflate_order_quantity():
-    # Verify initial stock of eggs
+    # Verify initial stock of eggs (ensure sufficient stock if depleted by prior runs)
+    from modules.guardrail_shell.grounding_oracle import DEMO_MERCHANT_CATALOG
+    if DEMO_MERCHANT_CATALOG["demo-merchant.myshopify.com"]["products"]["PROD-EGG-REG"]["stock"] <= 0:
+        DEMO_MERCHANT_CATALOG["demo-merchant.myshopify.com"]["products"]["PROD-EGG-REG"]["stock"] = 25
+        DEMO_MERCHANT_CATALOG["demo-merchant.myshopify.com"]["products"]["PROD-EGG-REG"]["in_stock"] = True
+
     res_cat = client.get("/api/catalog")
     init_stock = res_cat.json()["demo-merchant.myshopify.com"]["products"]["PROD-EGG-REG"]["stock"]
 

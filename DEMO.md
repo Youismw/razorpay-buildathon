@@ -65,3 +65,44 @@ Feature: LLM Prompt Injection & Constraint Boundary Defense
     And the Mandate Vault is never invoked
     And the audit ledger logs a POLICY_VIOLATION event
 ```
+
+---
+
+## Feature: Multi-Provider Tiered Routing & Live Frontier Flow
+
+```gherkin
+Feature: Production Resilience & Multi-Provider Cascade
+  As an autonomous purchasing co-pilot
+  I want basic tasks routed to high-throughput models (Groq) and complex reasoning to frontier models (Gemini 3.6 Flash)
+  So that latency and API quotas are optimized while preserving high reasoning depth
+
+  Scenario: Tiered execution with live Razorpay S2S Order creation
+    Given a buyer enters a complex purchasing query
+    When the Orchestrator evaluates task complexity
+    Then it routes the request through the tiered cascade (Groq ➔ Gemini 3.6 Flash ➔ OpenRouter)
+    And the model produces structured ProposalObject JSON
+    And the Mandate Vault signs an ES256 JWS token verified against public JWKS
+    And the UPI Payment Adapter creates a live order on the Razorpay S2S Gateway (https://api.razorpay.com/v1/orders)
+    And Razorpay returns a genuine order ID (e.g. order_TXwHcsU45R9c3D)
+    And the ledger records the transaction status as SETTLED
+```
+
+---
+
+## Feature: Seller Autonomous Governance & Dynamic Pricing
+
+```gherkin
+Feature: Autonomous Merchant Dynamic Pricing & Competitor Intelligence
+  As a verified store merchant
+  I want my AI Co-Pilot to scan competitor prices across Amazon, Flipkart, and ONDC
+  So that I can adjust margins, list new SKUs, and trigger automated clearance discounts
+
+  Scenario: Merchant initiates competitor price scan and adjusts listing price
+    Given a merchant sells "Sony WH-CH520 Wireless Headphones" with wholesale cost 3500 INR
+    When the merchant asks the Seller Co-Pilot to compare market prices
+    Then the system scans competitor rates across marketplace channels
+    And the AI calculates median market price and suggests an optimal margin (e.g. 25%)
+    And upon merchant confirmation, the unified catalog price is updated atomically
+    And live orders trigger automated inventory decrements and logistics AWB generation
+```
+

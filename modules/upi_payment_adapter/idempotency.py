@@ -39,6 +39,21 @@ class IdempotencyStore:
 
     def __init__(self, db_path: Optional[str] = None):
         self._lock = threading.Lock()
+        self.database_url = os.environ.get("DATABASE_URL")
+        self._is_postgres = False
+
+        # Attempt PostgreSQL connection if DATABASE_URL is explicitly set
+        if self.database_url:
+            try:
+                import psycopg2
+                conn = psycopg2.connect(self.database_url, connect_timeout=3)
+                conn.close()
+                self._is_postgres = True
+                print("[IdempotencyStore] Connected to live PostgreSQL database cluster (INV-003)")
+            except Exception as e:
+                print(f"[IdempotencyStore] PostgreSQL connection failed ({e}); falling back to ACID SQLite WAL")
+                self._is_postgres = False
+
         if db_path is None:
             if os.environ.get("PYTEST_CURRENT_TEST"):
                 self._db_path = f"file:mem_idemp_{uuid.uuid4().hex}?mode=memory&cache=shared"

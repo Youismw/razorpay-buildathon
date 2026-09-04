@@ -39,6 +39,19 @@ class RevocationEngine:
     def __init__(self, db_path: Optional[str] = None):
         self._global_lock = threading.Lock()
         self._mandate_locks: Dict[str, threading.Lock] = {}
+        self.database_url = os.environ.get("DATABASE_URL")
+        self._is_postgres = False
+
+        if self.database_url:
+            try:
+                import psycopg2
+                conn = psycopg2.connect(self.database_url, connect_timeout=3)
+                conn.close()
+                self._is_postgres = True
+                print("[RevocationEngine] Connected to live PostgreSQL database cluster (INV-004)")
+            except Exception as e:
+                print(f"[RevocationEngine] PostgreSQL connection failed ({e}); falling back to ACID SQLite WAL")
+                self._is_postgres = False
 
         if db_path is None:
             base_dir = Path(__file__).resolve().parent.parent.parent / "audit_logs"
