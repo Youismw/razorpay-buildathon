@@ -63,60 +63,33 @@ from modules.upi_payment_adapter.webhooks import parse_webhook_event, WEBHOOK_SE
 from modules.upi_payment_adapter.razorpay_client import RazorpayClient, RazorpayOrder, _get_credentials
 from modules.upi_payment_adapter.idempotency import IdempotencyStore
 
-# Initialize revocation mutex lock engine (INV-004)
-revocation_engine = RevocationEngine()
-
-# Initialize Idempotency store (INV-003)
-_orchestrator_idempotency_store = IdempotencyStore()
-
-# Initialize Razorpay Client for live S2S Standard Checkout and UPI Autopay
-_razorpay_client = RazorpayClient()
-
-LIVE_MANDATES: List[Dict[str, Any]] = [
-    {
-        "id": "mnd_2026_08_a7f3",
-        "merchant_id": "demo-merchant.myshopify.com",
-        "max_amount_inr": 5000.0,
-        "state": "PAYMENT_ACTIVE",
-        "created_at": "2026-09-01T10:14:22Z",
-    },
-    {
-        "id": "mnd_2026_08_b912",
-        "merchant_id": "demo-merchant.myshopify.com",
-        "max_amount_inr": 25000.0,
-        "state": "PAYMENT_ACTIVE",
-        "created_at": "2026-09-01T12:30:11Z",
-    },
-    {
-        "id": "mnd_2026_08_c441",
-        "merchant_id": "demo-merchant.myshopify.com",
-        "max_amount_inr": 10000.0,
-        "state": "REVOKED",
-        "created_at": "2026-08-30T16:20:00Z",
-    },
-]
-
-# Pre-register default active mandates in engine
-revocation_engine.register_mandate("mnd_2026_08_a7f3", 500000)
-revocation_engine.register_mandate("mnd_2026_08_b912", 2500000)
-revocation_engine.register_mandate("mnd_2026_08_c441", 1000000)
-try:
-    revocation_engine.revoke("mnd_2026_08_c441", reason="Initial test revocation")
-except Exception:
-    pass
-
-_current_buyer_profile: Dict[str, Any] = {
-    "buyerDid": "agent-buyer-rohit@ap2",
-    "maxTransactionAmountInr": 15000.0,
-    "dailyBudgetInr": 50000.0,
-    "userPin": "1234",
-    "autonomyMode": "ask_above_limit",
-    "favoriteBrands": ["Sony", "Amul", "Blue Tokai", "Organic India"],
-    "staples": [
-        {"id": "staple-1", "name": "Amul Taaza Milk (1L)", "brand": "Amul", "frequency": "Weekly", "maxPriceInr": 70.0, "autoBuy": True},
-        {"id": "staple-2", "name": "Blue Tokai Coffee Beans", "brand": "Blue Tokai", "frequency": "Bi-weekly", "maxPriceInr": 500.0, "autoBuy": False},
-    ],
-}
+# Import shared runtime state & singletons from dedicated state module
+from modules.orchestrator.state import (
+    CATALOG_VERSION,
+    get_catalog_version,
+    touch_catalog_version,
+    revocation_engine,
+    _orchestrator_idempotency_store,
+    _razorpay_client,
+    LIVE_MANDATES,
+    _current_buyer_profile,
+    WEBHOOK_SECRET,
+    _get_credentials,
+)
+from modules.orchestrator.models import BuyRequest, BuyResponse
+from modules.orchestrator.routes.catalog import (
+    router as catalog_router,
+    AddProductRequest,
+    UpdateProductRequest,
+    ImportProductRequest,
+    get_catalog,
+    get_catalog_version as get_catalog_version_endpoint,
+    add_product_to_catalog,
+    update_product_in_catalog,
+    import_product_to_catalog,
+    get_seller_catalog,
+)
+from modules.orchestrator.routes.stream import router as stream_router, buy_stream
 
 app = FastAPI(title="Agentic UPI Commerce Bridge — Orchestrator", version="1.0.0")
 
@@ -129,41 +102,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-class BuyRequest(BaseModel):
-    raw_intent: str = Field(..., min_length=3, description="Natural language purchase intent")
-    buyer_did: Optional[str] = Field(default="buyer-default")
-    max_spend_inr: Optional[float] = Field(default=None, gt=0)
-    allowed_merchants: Optional[list] = None
-    validity_hours: int = Field(default=24, gt=0)
-    mode: str = Field(default="basic", description="basic | advanced")
-    llm_provider: str = Field(
-        default_factory=lambda: "mock" if os.environ.get("PYTEST_CURRENT_TEST") else "auto",
-        description="auto | gemini | groq | openrouter | mock",
-    )
-    simulate_failure_stage: Optional[int] = Field(default=None, description="1..5 to simulate failure at specific pipeline stage")
-    idempotency_key: Optional[str] = Field(default=None, description="Client idempotency key (INV-003)")
-    pin: Optional[str] = Field(default=None, description="Buyer security PIN for transactions exceeding policy ceiling (INV-001)")
+# Mount modular sub-routers
+app.include_router(catalog_router)
+app.include_router(stream_router)
 
 
-class BuyResponse(BaseModel):
-    trace_id: str
-    status: str  # SUCCESS | ESCALATED | FAILED
-    decision: str
-    mandate_id: Optional[str] = None
-    compact_jws: Optional[str] = None
-    total_price_paise: Optional[int] = None
-    constraint_hash: Optional[str] = None
-    confidence_score: Optional[float] = None
-    reasoning_summary: Optional[str] = None
-    ai_thought_steps: List[str] = Field(default_factory=list)
-    audit_trail: list = Field(default_factory=list)
-    audit_json_path: Optional[str] = None
-    audit_md_path: Optional[str] = None
-    audit_jsonl_path: Optional[str] = None
-    razorpay_order_id: Optional[str] = None
-    razorpay_key_id: Optional[str] = None
-    error: Optional[str] = None
+
+# BuyRequest and BuyResponse imported from modules.orchestrator.models
+
 
 
 # ═══════════════════════════════════════════════════════════
@@ -308,10 +254,8 @@ def healthz():
     return {"status": "ok", "service": "orchestrator", "architecture": "Deterministic Sandwich"}
 
 
-@app.get("/api/catalog")
-def get_catalog():
-    """Return available merchant catalogs for the frontend demo picker with real-time stock levels."""
-    return {"merchants": DEMO_MERCHANT_CATALOG, **DEMO_MERCHANT_CATALOG}
+# /api/catalog mounted via catalog_router
+
 
 
 # ═══════════════════════════════════════════════════════════
@@ -366,201 +310,8 @@ def dispatch_logistics(req: LogisticsDispatchRequest):
     )
 
 
-class AddProductRequest(BaseModel):
-    name: str
-    price_inr: float
-    category: str = "general"
-    stock: int = 25
-    supplier_cost_inr: Optional[float] = None
-    merchant_id: str = "demo-merchant.myshopify.com"
+# Catalog endpoints & models mounted via catalog_router (modules/orchestrator/routes/catalog.py)
 
-
-@app.post("/api/seller/catalog/add")
-def add_product_to_catalog(req: AddProductRequest):
-    """Add a new product to the unified AP2 merchant catalog for buyers and sellers."""
-    pid = f"PROD-{uuid.uuid4().hex[:6].upper()}"
-    cost_paise = int((req.supplier_cost_inr or (req.price_inr * 0.72)) * 100)
-    price_paise = int(req.price_inr * 100)
-
-    created_prod = add_or_update_product(
-        merchant_id=req.merchant_id,
-        product_id=pid,
-        product_data={
-            "name": req.name,
-            "price_paise": price_paise,
-            "category": req.category,
-            "in_stock": req.stock > 0,
-            "stock": req.stock,
-            "supplier_cost_paise": cost_paise,
-        },
-    )
-    register_merchant_product(req.merchant_id, pid)
-    global CATALOG_VERSION
-    CATALOG_VERSION = time.time()
-    return {"status": "SUCCESS", "product_id": pid, "product": created_prod, "version": CATALOG_VERSION}
-
-
-class UpdateProductRequest(BaseModel):
-    product_id: str
-    merchant_id: str = "demo-merchant.myshopify.com"
-    business_type: Optional[str] = None
-    stock: Optional[int] = None
-    price_inr: Optional[float] = None
-
-
-class ImportProductRequest(BaseModel):
-    product_id: str
-    merchant_id: str = "demo-merchant.myshopify.com"
-    stock: Optional[int] = 25
-    price_inr: Optional[float] = None
-
-
-@app.get("/api/catalog/version")
-def get_catalog_version():
-    """Return latest timestamp version of the global catalog for instant client cache validation."""
-    return {"version": CATALOG_VERSION}
-
-
-@app.post("/api/seller/catalog/update")
-def update_product_in_catalog(req: UpdateProductRequest):
-    """
-    Update stock or price of an existing product in the catalog.
-    Enforces strict ownership: merchants can ONLY edit products they sell.
-    """
-    global CATALOG_VERSION
-    m_data = DEMO_MERCHANT_CATALOG.get(req.merchant_id, {})
-    prods = m_data.get("products", {})
-    if req.product_id not in prods:
-        raise HTTPException(status_code=404, detail=f"Product '{req.product_id}' not found in catalog")
-
-    p = prods[req.product_id]
-    prod_cat = p.get("category", "")
-    if not is_product_sold_by_merchant(
-        product_id=req.product_id,
-        merchant_id=req.merchant_id,
-        business_type=req.business_type,
-        product_category=prod_cat,
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                f"Permission Denied: Product '{p.get('name', req.product_id)}' (Category: {prod_cat}) "
-                f"is part of the universal common market and is NOT sold by store '{req.merchant_id}' "
-                f"(Business classification: {req.business_type or 'unspecified'}). You cannot modify "
-                f"inventory or pricing for products outside your store."
-            ),
-        )
-
-    if req.stock is not None:
-        p["stock"] = req.stock
-        p["in_stock"] = req.stock > 0
-    if req.price_inr is not None:
-        p["price_paise"] = int(req.price_inr * 100)
-    save_catalog_to_disk()
-    CATALOG_VERSION = time.time()
-    return {"status": "SUCCESS", "product_id": req.product_id, "product": p, "version": CATALOG_VERSION}
-
-
-@app.post("/api/seller/catalog/import")
-def import_product_to_catalog(req: ImportProductRequest):
-    """Import an existing common market product into the merchant's store so they can sell and edit it."""
-    global CATALOG_VERSION
-    m_data = DEMO_MERCHANT_CATALOG.get(req.merchant_id, {})
-    prods = m_data.get("products", {})
-    if req.product_id not in prods:
-        raise HTTPException(status_code=404, detail=f"Product '{req.product_id}' not found in catalog")
-
-    register_merchant_product(req.merchant_id, req.product_id)
-    p = prods[req.product_id]
-    if req.stock is not None:
-        p["stock"] = req.stock
-        p["in_stock"] = req.stock > 0
-    if req.price_inr is not None:
-        p["price_paise"] = int(req.price_inr * 100)
-
-    save_catalog_to_disk()
-    CATALOG_VERSION = time.time()
-    return {
-        "status": "SUCCESS",
-        "message": f"Product '{p.get('name')}' successfully added to your store inventory.",
-        "product_id": req.product_id,
-        "product": p,
-        "version": CATALOG_VERSION,
-    }
-
-
-@app.get("/api/seller/catalog")
-def get_seller_catalog(
-    merchant_id: str = "demo-merchant.myshopify.com",
-    business_type: Optional[str] = None,
-    scope: Optional[str] = None,
-):
-    """
-    Return live inventory catalog for the seller portal, scoped to store-owned items or universal market.
-    - If scope == 'store' (or business_type is provided and scope != 'market'):
-        Returns ONLY items sold by this merchant.
-    - If scope == 'market' or 'all' (or general request without query params):
-        Returns all market items, with 'can_edit' and 'is_owned' authority flags.
-    """
-    effective_scope = scope
-    if effective_scope is None:
-        effective_scope = "store" if business_type else "all"
-
-    profile = get_seller_profile()
-    effective_business_type = business_type or profile.business_type
-
-    m_data = DEMO_MERCHANT_CATALOG.get(merchant_id, {})
-    prods = m_data.get("products", {})
-    items = []
-
-    for pid, p in prods.items():
-        cat = p.get("category", "general")
-        is_owned = is_product_sold_by_merchant(
-            product_id=pid,
-            merchant_id=merchant_id,
-            business_type=effective_business_type,
-            product_category=cat,
-        )
-
-        if effective_scope == "store" and not is_owned:
-            continue
-
-        price_inr = p["price_paise"] / 100.0
-        cost_inr = p.get("supplier_cost_paise", int(p["price_paise"] * 0.72)) / 100.0
-        margin_pct = round(((price_inr - cost_inr) / price_inr) * 100.0, 1) if price_inr > 0 else 25.0
-        stock_cnt = p.get("stock", 25 if p.get("in_stock", True) else 0)
-
-        items.append({
-            "id": pid,
-            "name": p["name"],
-            "title": p["name"],
-            "category": cat,
-            "stock": stock_cnt,
-            "inventoryStock": stock_cnt,
-            "supplierCost": cost_inr,
-            "supplierCostInr": cost_inr,
-            "sellingPrice": price_inr,
-            "sellingPriceInr": price_inr,
-            "marginPct": margin_pct,
-            "inStock": p.get("in_stock", stock_cnt > 0),
-            "marketplaces": ["AP2 Gateway", "Amazon", "Flipkart"],
-            "channels": ["AP2 Gateway", "Amazon", "Flipkart"],
-            "daysIdle": 5,
-            "daysInInventory": 5,
-            "discountPct": 0,
-            "autoClearanceDiscountPct": 0,
-            "is_owned": is_owned,
-            "can_edit": is_owned,
-            "store_status": "In Your Store" if is_owned else "Universal Common Market",
-        })
-
-    return {
-        "items": items,
-        "version": CATALOG_VERSION,
-        "total_count": len(items),
-        "scope": effective_scope,
-        "business_type": effective_business_type,
-    }
 
 
 @app.get("/api/seller/analytics")
@@ -2055,374 +1806,8 @@ def buy(req: BuyRequest):
     )
 
 
-@app.post("/buy/stream")
-async def buy_stream(req: BuyRequest):
-    """
-    SSE Streaming endpoint for real-time visualization of the Deterministic Sandwich.
-    Emits events as each stage processes so the frontend lights up in real time.
-    """
-    async def event_generator():
-        trace_id = f"trace-{uuid.uuid4().hex[:12]}"
-        audit_trail = []
-        ts = lambda: datetime.datetime.now(datetime.timezone.utc).isoformat()
+# /buy/stream endpoint mounted via stream_router (modules/orchestrator/routes/stream.py)
 
-        # 0. PIN Authorization Check (INV-001, Bug 16)
-        configured_pin = str(_current_buyer_profile.get("userPin") or _current_buyer_profile.get("pin") or "1234")
-        autonomy_mode = _current_buyer_profile.get("autonomyMode", "ask_above_limit")
-        max_tx_limit = float(_current_buyer_profile.get("maxTransactionAmountInr", _current_buyer_profile.get("maxTransactionLimitInr", 15000.0)))
-        requires_pin = (autonomy_mode == "pin_required")
-        if req.pin and str(req.pin).strip() != configured_pin.strip():
-            err_msg = "INVALID_PIN: Provided security PIN does not match configured user PIN."
-            yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'AUTHORIZATION_GATE', 'error': err_msg, 'timestamp': ts()})}\n\n"
-            yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'UNAUTHORIZED', 'error': err_msg, 'timestamp': ts()})}\n\n"
-            return
-        if requires_pin and not req.simulate_failure_stage:
-            if not req.pin:
-                err_msg = "PIN_REQUIRED: This transaction requires buyer PIN authorization."
-                yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'AUTHORIZATION_GATE', 'error': err_msg, 'timestamp': ts()})}\n\n"
-                yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'ESCALATED', 'decision': 'PIN_REQUIRED', 'error': err_msg, 'timestamp': ts()})}\n\n"
-                return
-        
-        # 0. Initializing
-        yield f"data: {json.dumps({'event': 'INIT', 'trace_id': trace_id, 'raw_intent': req.raw_intent, 'timestamp': ts()})}\n\n"
-        await asyncio.sleep(0.35)
-
-        # 1. Constraint Compilation
-        if req.simulate_failure_stage == 1 or len(req.raw_intent.strip()) < 3:
-            err_msg = "Compiler Rejection: Intent string too short (< 3 chars) or invalid constraint schema (RFC 8785)"
-            yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'CONSTRAINT_COMPILATION', 'error': err_msg, 'timestamp': ts()})}\n\n"
-            yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'COMPILATION_ERROR', 'error': err_msg, 'timestamp': ts()})}\n\n"
-            return
-
-        try:
-            compile_req = CompileRequest(
-                raw_intent=req.raw_intent,
-                buyer_did=req.buyer_did,
-                max_spend_inr=req.max_spend_inr,
-                allowed_merchants=req.allowed_merchants,
-                validity_hours=req.validity_hours,
-            )
-            compiled, constraint_hash, canonical_json = compile_intent(compile_req)
-            audit_trail.append({
-                "stage": "CONSTRAINT_COMPILATION",
-                "timestamp": ts(),
-                "intent_id": compiled.intent_id,
-                "constraint_hash": constraint_hash,
-                "max_amount_paise": compiled.spend_limit.max_amount_paise,
-                "product_query": compiled.product_query,
-            })
-            yield f"data: {json.dumps({'event': 'STAGE_COMPLETE', 'stage': 'CONSTRAINT_COMPILATION', 'data': {'intent_id': compiled.intent_id, 'constraint_hash': constraint_hash, 'max_amount_paise': compiled.spend_limit.max_amount_paise, 'product_query': compiled.product_query, 'canonical_json': canonical_json}, 'timestamp': ts()})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'CONSTRAINT_COMPILATION', 'error': str(e), 'timestamp': ts()})}\n\n"
-            yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'COMPILATION_ERROR', 'error': str(e), 'timestamp': ts()})}\n\n"
-            return
-
-        await asyncio.sleep(0.4)
-
-        # 2. AI Reasoning
-        if req.simulate_failure_stage == 2 or req.llm_provider == "fail-reasoning":
-            err_msg = "Reasoning Failure: No matching product found in merchant catalog for ungrounded query schema."
-            thought_text = f"Parsed buyer intent -> Query '{req.raw_intent}' not indexed in merchant UCP catalog."
-            yield f"data: {json.dumps({'event': 'AI_THOUGHT', 'step_index': 1, 'text': thought_text, 'timestamp': ts()})}\n\n"
-            await asyncio.sleep(0.2)
-            yield f"data: {json.dumps({'event': 'AI_THOUGHT', 'step_index': 2, 'text': 'Zero candidate SKUs satisfy grounding constraints.', 'timestamp': ts()})}\n\n"
-            await asyncio.sleep(0.2)
-            yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'LLM_REASONING', 'error': err_msg, 'timestamp': ts()})}\n\n"
-            yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'REASONING_ERROR', 'error': err_msg, 'timestamp': ts()})}\n\n"
-            return
-
-        try:
-            reasoning_result = generate_proposal_sync(
-                constraints=compiled,
-                provider=req.llm_provider,
-                mode=req.mode,
-            )
-            proposal_dict = reasoning_result.proposal
-            ai_thought_steps = reasoning_result.thought_steps
-
-            # Stream each thought step with a micro delay for live effect
-            for idx, step in enumerate(ai_thought_steps):
-                yield f"data: {json.dumps({'event': 'AI_THOUGHT', 'step_index': idx + 1, 'text': step, 'timestamp': ts()})}\n\n"
-                await asyncio.sleep(0.2)
-
-            # Check if reasoning agent could not find a valid matching product
-            is_empty_or_not_found = (
-                proposal_dict.get("is_not_found")
-                or proposal_dict.get("total_price_paise", 0) <= 0
-                or any(item.get("product_id") == "PROD-NOT-FOUND" for item in proposal_dict.get("items", []))
-            )
-            if is_empty_or_not_found:
-                ai_summary = proposal_dict.get("reasoning_summary") or f"No product matching '{req.raw_intent}' found in merchant catalog."
-                is_ambiguous = (
-                    proposal_dict.get("is_ambiguous")
-                    or "elaborate" in ai_summary.lower()
-                    or "clarify" in ai_summary.lower()
-                    or "unintelligible" in ai_summary.lower()
-                    or "gibberish" in ai_summary.lower()
-                )
-                err_msg = f"Ambiguous Request: {ai_summary}" if is_ambiguous else f"Product Not Found: {ai_summary}"
-                yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'LLM_REASONING', 'error': err_msg, 'timestamp': ts()})}\n\n"
-                yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'REASONING_ERROR', 'error': err_msg, 'timestamp': ts()})}\n\n"
-                return
-
-            audit_trail.append({
-                "stage": "LLM_REASONING",
-                "timestamp": ts(),
-                "llm_invocation_id": reasoning_result.llm_invocation_id,
-                "provider": reasoning_result.provider_used,
-                "proposal_id": proposal_dict.get("proposal_id"),
-                "total_price_paise": proposal_dict.get("total_price_paise"),
-                "thought_steps": ai_thought_steps,
-            })
-            yield f"data: {json.dumps({'event': 'STAGE_COMPLETE', 'stage': 'LLM_REASONING', 'data': {'proposal': proposal_dict, 'provider': reasoning_result.provider_used, 'thought_steps': ai_thought_steps}, 'timestamp': ts()})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'LLM_REASONING', 'error': str(e), 'timestamp': ts()})}\n\n"
-            yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'REASONING_ERROR', 'error': str(e), 'timestamp': ts()})}\n\n"
-            return
-
-        await asyncio.sleep(0.35)
-
-        # 3. Guardrail Shell
-        schema_result = validate_proposal_schema(proposal_dict)
-        if not schema_result.valid:
-            err_msg = f"Schema validation failed: {schema_result.errors}"
-            yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'GUARDRAIL_SHELL', 'error': err_msg, 'timestamp': ts()})}\n\n"
-            yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'ESCALATED', 'decision': 'SCHEMA_REJECTED', 'error': err_msg, 'timestamp': ts()})}\n\n"
-            return
-        proposal = schema_result.proposal
-
-        policy_result = enforce_policy(proposal, compiled)
-        grounding_result = verify_grounding(proposal.items)
-        confidence = compute_confidence(
-            schema_valid=True,
-            grounding_verified=grounding_result.verified,
-            policy_passed=policy_result.passed,
-            proposal_summary={"proposal_id": proposal.proposal_id, "total": proposal.total_price_paise},
-            constraint_summary={"max_amount_paise": compiled.spend_limit.max_amount_paise},
-            grounding_details=grounding_result.details,
-        )
-
-        guardrail_data = {
-            "decision": confidence.decision,
-            "confidence_score": confidence.confidence_score,
-            "schema_valid": True,
-            "policy_passed": policy_result.passed,
-            "grounding_verified": grounding_result.verified,
-            "violations": [v.model_dump() for v in policy_result.violations],
-            "manifest_hash": grounding_result.manifest_hash,
-            "scores": confidence.scores.model_dump(),
-        }
-
-        if req.simulate_failure_stage == 3 or confidence.decision != "APPROVED":
-            violations_text = "; ".join([v.message for v in policy_result.violations]) if policy_result.violations else "Budget ceiling breached (INV-010)"
-            fail_msg = f"Guardrail Policy Block: Policy limits exceeded ({violations_text})"
-            yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'GUARDRAIL_SHELL', 'decision': confidence.decision, 'error': fail_msg, 'data': guardrail_data, 'timestamp': ts()})}\n\n"
-            yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'ESCALATED', 'decision': confidence.decision, 'error': fail_msg, 'timestamp': ts()})}\n\n"
-            return
-
-        yield f"data: {json.dumps({'event': 'STAGE_COMPLETE', 'stage': 'GUARDRAIL_SHELL', 'data': guardrail_data, 'timestamp': ts()})}\n\n"
-
-        await asyncio.sleep(0.35)
-
-        # 4. Mandate Vault Signing
-        if req.simulate_failure_stage == 4:
-            err_msg = "Vault Signing Error: Cryptographic integrity failure: ES256 key mismatch / adversarial security gate block (INV-009 / INV-008)"
-            yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'VAULT_SIGNING', 'error': err_msg, 'timestamp': ts()})}\n\n"
-            yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'VAULT_SIGNING_ERROR', 'error': err_msg, 'timestamp': ts()})}\n\n"
-            return
-
-        try:
-            vault_payload = {
-                "proposal_id": proposal.proposal_id,
-                "intent_id": proposal.intent_id,
-                "constraint_hash": constraint_hash,
-                "total_price_paise": proposal.total_price_paise,
-                "items": [item.model_dump() for item in proposal.items],
-                "grounding_manifest_hash": grounding_result.manifest_hash,
-                "confidence_score": confidence.confidence_score,
-            }
-            compact_jws, canonical_sha = sign_canonical_payload(vault_payload)
-            mandate_id = f"mandate-{uuid.uuid4().hex[:12]}"
-            
-            vault_data = {
-                "mandate_id": mandate_id,
-                "compact_jws": compact_jws,
-                "canonical_sha256": canonical_sha,
-                "algorithm": "ES256 (ECDSA P-256)",
-                "key_id": "2026-08-ap2-1",
-            }
-            yield f"data: {json.dumps({'event': 'STAGE_COMPLETE', 'stage': 'VAULT_SIGNING', 'data': vault_data, 'timestamp': ts()})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'VAULT_SIGNING', 'error': f'Vault signing failed: {e}', 'timestamp': ts()})}\n\n"
-            yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'VAULT_SIGNING_ERROR', 'error': str(e), 'timestamp': ts()})}\n\n"
-            return
-
-        await asyncio.sleep(0.35)
-
-        # 5. Settlement
-        if req.simulate_failure_stage == 5:
-            err_msg = "Settlement Block: 403 MANDATE_REVOKED: Mandate was revoked prior to settlement (Atomic Lock INV-004) / Merchant Scope Unauthorized."
-            yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'SETTLEMENT', 'error': err_msg, 'timestamp': ts()})}\n\n"
-            yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'SETTLEMENT_ERROR', 'error': err_msg, 'timestamp': ts()})}\n\n"
-            return
-
-        try:
-            # Stage 5: Create Real Razorpay Order if credentials configured
-            rzp_order_id = None
-            key_id, _ = _get_credentials()
-            try:
-                rzp_res = _razorpay_client.create_order(
-                    RazorpayOrder(
-                        amount_paise=proposal.total_price_paise,
-                        currency="INR",
-                        receipt=f"rcpt_{trace_id[:12]}",
-                        notes={
-                            "trace_id": trace_id,
-                            "mandate_id": mandate_id,
-                            "constraint_hash": constraint_hash,
-                        }
-                    )
-                )
-                if rzp_res.success:
-                    rzp_order_id = rzp_res.razorpay_order_id
-                else:
-                    rzp_order_id = None
-            except Exception as e:
-                print(f"[Orchestrator Stream] Warning: Razorpay order creation failed: {e}")
-                rzp_order_id = None
-
-            # Bug 4 Protection: If Razorpay order creation failed, abort settlement immediately
-            if not rzp_order_id:
-                err_msg = "Payment gateway order creation failed"
-                audit_trail.append({
-                    "stage": "SETTLEMENT",
-                    "mandate_id": mandate_id,
-                    "status": "FAILED",
-                    "total_price_paise": proposal.total_price_paise,
-                    "error": err_msg,
-                })
-                yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'SETTLEMENT', 'error': err_msg, 'timestamp': ts()})}\n\n"
-                yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'SETTLEMENT_ERROR', 'error': err_msg, 'timestamp': ts()})}\n\n"
-                return
-
-            audit_trail.append({
-                "stage": "SETTLEMENT",
-                "mandate_id": mandate_id,
-                "status": "SETTLED",
-                "total_price_paise": proposal.total_price_paise,
-                "razorpay_order_id": rzp_order_id,
-            })
-            
-            # Register mandate into live mandates ledger & revocation engine (INV-004)
-            revocation_engine.register_mandate(mandate_id, proposal.total_price_paise)
-            LIVE_MANDATES.insert(0, {
-                "id": mandate_id,
-                "merchant_id": proposal.items[0].merchant_id if proposal.items else "demo-merchant.myshopify.com",
-                "max_amount_inr": round(proposal.total_price_paise / 100.0, 2),
-                "state": "PAYMENT_ACTIVE",
-                "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "trace_id": trace_id,
-            })
-
-            # Record idempotency record (INV-003)
-            if req.idempotency_key:
-                try:
-                    _orchestrator_idempotency_store.check_and_insert(
-                        mandate_id="global",
-                        idempotency_key=req.idempotency_key,
-                        amount_paise=proposal.total_price_paise,
-                    )
-                    _orchestrator_idempotency_store.update_status(
-                        mandate_id="global",
-                        idempotency_key=req.idempotency_key,
-                        status="SUCCESS",
-                        razorpay_order_id=rzp_order_id,
-                    )
-                except Exception as e:
-                    print(f"[Orchestrator Stream] Idempotency record warning: {e}")
-
-            # Synchronize unified commerce database
-            for it in proposal.items:
-                pid = it.product_id
-                m_id = it.merchant_id or "demo-merchant.myshopify.com"
-                qty = it.quantity
-                price_inr = it.offer_price_paise / 100.0
-                m_catalog = DEMO_MERCHANT_CATALOG.get(m_id, {}).get("products", {})
-                p_data = m_catalog.get(pid)
-                if not p_data:
-                    for m in DEMO_MERCHANT_CATALOG.values():
-                        if pid in m.get("products", {}):
-                            p_data = m["products"][pid]
-                            break
-
-                if p_data and "supplier_cost_paise" in p_data:
-                    cost_inr = round(p_data["supplier_cost_paise"] / 100.0, 2)
-                else:
-                    cost_inr = round(price_inr * 0.72, 2)
-                profit_inr = round(price_inr - cost_inr, 2)
-
-                decrement_inventory(merchant_id=m_id, product_id=pid, quantity=qty)
-                record_seller_order(
-                    SellerOrder(
-                        order_id=f"ORD-{uuid.uuid4().hex[:6].upper()}",
-                        trace_id=trace_id,
-                        timestamp=datetime.datetime.now().isoformat(),
-                        product_id=pid,
-                        product_name=it.product_name,
-                        category=it.category,
-                        quantity=qty,
-                        supplier_cost_inr=cost_inr,
-                        selling_price_inr=price_inr,
-                        net_profit_inr=profit_inr,
-                        profit_margin_pct=round((profit_inr / price_inr) * 100.0, 1) if price_inr > 0 else 25.0,
-                        channel="ap2_gateway",
-                        buyer_type="ai_purchasing_agent",
-                        buyer_identifier=req.buyer_did or "buyer-default",
-                        order_status="CONFIRMED",
-                        manifest_hash=constraint_hash,
-                        jws_token_preview=compact_jws[:60] + "..." if compact_jws else "N/A",
-                        razorpay_order_id=rzp_order_id,
-                        ai_deliberation_steps=ai_thought_steps,
-                    )
-                )
-
-            global CATALOG_VERSION
-            CATALOG_VERSION = time.time()
-
-            paths = write_transaction_audit_files(
-                trace_id=trace_id,
-                status="SUCCESS",
-                decision="APPROVED",
-                raw_intent=req.raw_intent,
-                constraint_hash=constraint_hash,
-                total_price_paise=proposal.total_price_paise,
-                confidence_score=confidence.confidence_score,
-                reasoning_summary=proposal.reasoning_summary,
-                ai_thought_steps=ai_thought_steps,
-                mandate_id=mandate_id,
-                compact_jws=compact_jws,
-                audit_trail=audit_trail,
-            )
-
-            settlement_data = {
-                "status": "SETTLED",
-                "mandate_id": mandate_id,
-                "total_price_paise": proposal.total_price_paise,
-                "total_inr": proposal.total_price_paise / 100.0,
-                "razorpay_order_id": rzp_order_id,
-                "razorpay_key_id": key_id,
-                "audit_json_path": paths["json_path"],
-                "audit_md_path": paths["md_path"],
-                "audit_jsonl_path": paths["jsonl_path"],
-            }
-            yield f"data: {json.dumps({'event': 'STAGE_COMPLETE', 'stage': 'SETTLEMENT', 'data': settlement_data, 'timestamp': ts()})}\n\n"
-            yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'SUCCESS', 'trace_id': trace_id, 'mandate_id': mandate_id, 'compact_jws': compact_jws, 'total_price_paise': proposal.total_price_paise, 'razorpay_order_id': rzp_order_id, 'razorpay_key_id': key_id})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'SETTLEMENT', 'error': f'Settlement failed: {e}', 'timestamp': ts()})}\n\n"
-            yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'SETTLEMENT_ERROR', 'error': str(e), 'timestamp': ts()})}\n\n"
-            return
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # ═══════════════════════════════════════════════════════════
