@@ -670,9 +670,10 @@ def get_analytics_summary(timeframe: str = "3m") -> AnalyticsSummary:
     live_additional_profit = sum(o.net_profit_inr for o in LIVE_SELLER_ORDERS if o.order_status in ["CONFIRMED", "PAID_CONFIRMED", "DISPATCHED", "DELIVERED"])
     live_additional_orders = len([o for o in LIVE_SELLER_ORDERS if o.order_status in ["CONFIRMED", "PAID_CONFIRMED", "DISPATCHED", "DELIVERED"]])
 
-    base_rev = (184500.0 * mult) + live_additional_rev
+    base_channel_rev = 184500.0 * mult
+    base_rev = round(base_channel_rev + live_additional_rev, 2)
     base_orders = int(48 * mult) + live_additional_orders
-    base_profit = (46125.0 * mult) + live_additional_profit
+    base_profit = round((46125.0 * mult) + live_additional_profit, 2)
     avg_margin = round((base_profit / base_rev) * 100.0, 1) if base_rev > 0 else 25.0
 
     monthly_trends = [
@@ -728,10 +729,10 @@ def get_analytics_summary(timeframe: str = "3m") -> AnalyticsSummary:
         average_margin_pct=avg_margin,
         successful_deliveries_pct=97.8,
         channel_breakdown={
-            "AP2 Agentic Gateway": round((base_rev * 0.45) + live_additional_rev, 2),
-            "Amazon India": round(base_rev * 0.32, 2),
-            "Flipkart": round(base_rev * 0.15, 2),
-            "ONDC Network": round(base_rev * 0.08, 2),
+            "AP2 Agentic Gateway": round((base_channel_rev * 0.45) + live_additional_rev, 2),
+            "Amazon India": round(base_channel_rev * 0.32, 2),
+            "Flipkart": round(base_channel_rev * 0.15, 2),
+            "ONDC Network": round(base_rev - (round((base_channel_rev * 0.45) + live_additional_rev, 2) + round(base_channel_rev * 0.32, 2) + round(base_channel_rev * 0.15, 2)), 2),
         },
         monthly_trend=monthly_trends,
         recent_orders=LIVE_SELLER_ORDERS,

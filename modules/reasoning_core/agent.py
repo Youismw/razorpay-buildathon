@@ -590,6 +590,14 @@ def _post_process_proposal(
     cleaned_intent = re.sub(r'\b\d+\s*-\s*(?:pack|piece|pcs|set)\b', '', cleaned_intent, flags=re.I)
 
     for item in proposal_dict.get("items", []):
+        # Fallback if model names price field price_paise or price instead of offer_price_paise
+        if "offer_price_paise" not in item:
+            if "price_paise" in item:
+                item["offer_price_paise"] = item["price_paise"]
+            elif "price" in item:
+                val = item["price"]
+                item["offer_price_paise"] = int(val * 100) if val < 10000 else int(val)
+
         p_name = item.get("product_name", "")
         curr_qty = item.get("quantity", 1)
         # Check if product title specifies a pack count, e.g. "Pack of 6", "Box of 12"
@@ -607,7 +615,8 @@ def _post_process_proposal(
 
     # Recalculate total deterministically to reflect correct quantity
     total = sum(it.get("offer_price_paise", 0) * it.get("quantity", 1) for it in proposal_dict.get("items", []))
-    proposal_dict["total_price_paise"] = total
+    if total > 0 or not proposal_dict.get("total_price_paise"):
+        proposal_dict["total_price_paise"] = total
 
     if not thought_steps:
         max_inr = constraints.spend_limit.max_amount_paise / 100.0
@@ -681,12 +690,12 @@ def _generate_groq_proposal(
     system_prompt = _build_system_prompt()
     user_prompt = _build_user_prompt(constraints, catalog)
 
-    candidates = [model, "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b"]
+    candidates = [model, "openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile", "qwen/qwen3.6-27b"]
     data = None
     used_model = model
     last_err = None
 
-    with httpx.Client(timeout=3.0) as client:
+    with httpx.Client(timeout=10.0) as client:
         for candidate in dict.fromkeys(candidates):
             try:
                 resp = client.post(

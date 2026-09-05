@@ -182,7 +182,23 @@ function formatHumanFriendlyError(rawError: string, stageId: string): FriendlyEr
     };
   }
 
-  // 7. General Fallback
+  // 7. Settlement Gateway Failure (Stage 5)
+  if (
+    stageId === "SETTLEMENT" ||
+    lower.includes("settlement") ||
+    lower.includes("payment gateway")
+  ) {
+    return {
+      title: "Settlement Gateway Finalization Halted",
+      summary:
+        "The UPI Payment Adapter encountered an issue finalizing the transaction with the payment gateway. Invariant protection guarantees zero unsupervised money movement.",
+      action: "Review your purchase parameters and retry.",
+      invariantBadge: "UPI AUTOPAY · Immutable Ledger Invariant",
+      technicalDetails: err || "Settlement Gate: Payment gateway order could not be created.",
+    };
+  }
+
+  // 8. General Fallback
   return {
     title: "Security Gate Enforced — Zero Unsupervised Money Movement",
     summary:

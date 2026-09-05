@@ -24,10 +24,32 @@ export function getBackendUrl(): string {
   return (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 }
 
-export const BACKEND_URL = {
-  toString: () => getBackendUrl(),
-  valueOf: () => getBackendUrl(),
-} as unknown as string;
+class DynamicBackendUrl {
+  toString(): string {
+    return getBackendUrl();
+  }
+  valueOf(): string {
+    return getBackendUrl();
+  }
+  [Symbol.toPrimitive](): string {
+    return getBackendUrl();
+  }
+  replace(searchValue: string | RegExp, replaceValue: string): string {
+    const url = getBackendUrl() || (typeof window !== "undefined" ? window.location.host : "127.0.0.1:8000");
+    return url.replace(searchValue as any, replaceValue);
+  }
+  startsWith(searchString: string, position?: number): boolean {
+    return getBackendUrl().startsWith(searchString, position);
+  }
+  includes(searchString: string, position?: number): boolean {
+    return getBackendUrl().includes(searchString, position);
+  }
+  slice(start?: number, end?: number): string {
+    return getBackendUrl().slice(start, end);
+  }
+}
+
+export const BACKEND_URL = new DynamicBackendUrl() as unknown as string;
 
 export async function checkBackendHealth(): Promise<{ status: string; online: boolean }> {
   try {

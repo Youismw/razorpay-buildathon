@@ -37,6 +37,7 @@ def write_transaction_audit_files(
     compact_jws: Optional[str],
     audit_trail: List[Dict[str, Any]],
     error: Optional[str] = None,
+    razorpay_order_id: Optional[str] = None,
 ) -> Dict[str, str]:
     """
     Writes structured JSON and human-readable Markdown audit files for the transaction.
@@ -74,6 +75,7 @@ def write_transaction_audit_files(
             "algorithm": "ES256" if compact_jws else None,
         },
         "error": error,
+        "razorpay_order_id": razorpay_order_id,
         "audit_trail_events": audit_trail,
     }
 

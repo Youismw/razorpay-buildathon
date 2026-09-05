@@ -236,7 +236,7 @@ export const AdvancedToolsView: React.FC = () => {
               <div className="p-4 rounded-lg bg-[var(--bg-subtle)] font-mono text-xs text-[var(--text-secondary)] space-y-2">
                 <div><strong className="text-[var(--brown)]">POST</strong> /buy/stream HTTP/1.1</div>
                 <div>Content-Type: application/json</div>
-                <div>Host: {BACKEND_URL.replace(/^https?:\/\//, "")}</div>
+                <div>Host: {String(BACKEND_URL).replace(/^https?:\/\//, "") || (typeof window !== "undefined" ? window.location.host : "127.0.0.1:8000")}</div>
                 <div className="pt-2 border-t border-[rgba(92,61,46,0.08)]">
                   {`{"raw_intent": "Buy headphones under Rs 5000", "max_spend_inr": 5000, "llm_provider": "auto"}`}
                 </div>

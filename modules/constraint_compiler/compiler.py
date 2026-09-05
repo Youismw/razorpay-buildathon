@@ -53,9 +53,9 @@ def extract_amount_from_intent(raw_intent: str) -> Optional[int]:
 
 
 def extract_quantity_from_intent(raw_intent: str) -> int:
-    """Extract item quantity if specified in natural language (e.g. '2 units', '3 bottles', 'buy 2 headphones')."""
+    """Extract item quantity if specified in natural language (e.g. '2 units', '3 bottles', '3L of milk', 'buy 2 headphones')."""
     text = raw_intent.strip()
-    m = re.search(r"\b(\d+)\s*(?:units?|items?|packs?|pcs?|pieces?|bottles?|pairs?|boxes?)\b", text, re.IGNORECASE)
+    m = re.search(r"\b(\d+)\s*(?:l|liter|liters|litre|litres|kg|kgs|g|gm|ml|units?|items?|packs?|packets?|pcs?|pieces?|bottles?|pairs?|boxes?)\b", text, re.IGNORECASE)
     if m:
         try:
             val = int(m.group(1))
@@ -63,7 +63,7 @@ def extract_quantity_from_intent(raw_intent: str) -> int:
                 return val
         except ValueError:
             pass
-    m2 = re.search(r"\b(?:buy|order|get|purchase)\s+(\d+)\s+(?:of\s+)?([a-zA-Z]+)", text, re.IGNORECASE)
+    m2 = re.search(r"\b(?:buy|order|get|purchase)\s+(\d+)\s*(?:l|liter|liters|litre|litres|kg|kgs|g|gm|ml)?\s+(?:of\s+)?([a-zA-Z]+)", text, re.IGNORECASE)
     if m2:
         try:
             val = int(m2.group(1))
@@ -75,12 +75,15 @@ def extract_quantity_from_intent(raw_intent: str) -> int:
 
 
 def extract_product_query(raw_intent: str) -> str:
-    """Extract the product search query by stripping intent prefixes and amount clauses."""
+    """Extract the product search query by stripping intent prefixes, rate clauses, and amount clauses."""
     text = raw_intent.strip()
     for prefix in _INTENT_PREFIXES:
         text = re.sub(prefix, "", text, flags=re.IGNORECASE).strip()
-    # Remove quantity clauses
-    text = re.sub(r"^\d+\s*(?:units?|items?|packs?|pcs?|pieces?|bottles?|pairs?|boxes?)\s+(?:of\s+)?", "", text, flags=re.IGNORECASE).strip()
+    # Strip rate expressions like (Rate: ₹72/L) or Rate: 72/unit
+    text = re.sub(r"[\(\[\{]?\s*rate\s*:\s*(?:rs\.?|₹|inr)?\s*\d+(?:\.\d{1,2})?(?:\s*/\s*[a-zA-Z]+)?\s*[\)\]\}]?", "", text, flags=re.IGNORECASE).strip()
+    text = re.sub(r"(?:rs\.?|₹|inr)?\s*\d+(?:\.\d{1,2})?\s*/\s*(?:l|liter|litres|kg|g|gm|unit|pc|piece|pack|box)\b", "", text, flags=re.IGNORECASE).strip()
+    # Remove quantity clauses including volume/mass units
+    text = re.sub(r"^\d+\s*(?:l|liter|liters|litre|litres|kg|kgs|g|gm|ml|units?|items?|packs?|packets?|pcs?|pieces?|bottles?|pairs?|boxes?)\s+(?:of\s+)?", "", text, flags=re.IGNORECASE).strip()
     text = re.sub(r"^\d+\s+(?:of\s+)?", "", text, flags=re.IGNORECASE).strip()
     # Remove amount clauses
     for pattern in _AMOUNT_PATTERNS:
