@@ -10,7 +10,7 @@ from modules.guardrail_shell.confidence_gate import compute_confidence
 # --- Helpers ---
 
 def _make_valid_proposal(
-    offer_price_paise: int = 499900,
+    offer_price_paise: int = 449900,
     merchant_id: str = "demo-merchant.myshopify.com",
     product_id: str = "PROD-WH-CH520",
     constraint_hash: str = "sha256:test_hash",
@@ -105,7 +105,7 @@ def test_policy_accepts_within_budget():
     from modules.guardrail_shell.schema_validator import ProposalObject
     from modules.constraint_compiler.models import CompiledConstraints
 
-    proposal = ProposalObject(**_make_valid_proposal(offer_price_paise=499900))
+    proposal = ProposalObject(**_make_valid_proposal(offer_price_paise=449900))
     constraints = CompiledConstraints(**_make_valid_constraints(max_paise=500000))
     result = enforce_policy(proposal, constraints)
     assert result.passed
@@ -132,7 +132,7 @@ def test_grounding_verifies_known_product():
         product_id="PROD-WH-CH520",
         product_name="Sony WH-CH520",
         merchant_id="demo-merchant.myshopify.com",
-        offer_price_paise=499900,
+        offer_price_paise=449900,
     )]
     result = verify_grounding(items)
     assert result.verified
@@ -168,7 +168,7 @@ def test_grounding_rejects_insufficient_stock():
         product_id="PROD-WH-CH520",
         product_name="Sony WH-CH520",
         merchant_id="demo-merchant.myshopify.com",
-        offer_price_paise=499900,
+        offer_price_paise=449900,
         quantity=500,  # Exceeds available stock
     )]
     result = verify_grounding(items)

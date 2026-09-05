@@ -1181,11 +1181,11 @@ def evaluate_guardrail_api(req: GuardrailEvaluateApiRequest):
             "product_id": "PROD-WH-CH520",
             "product_name": "Sony WH-CH520 Wireless Headphones",
             "merchant_id": req.allowed_merchant,
-            "offer_price_paise": 460800,
+            "offer_price_paise": 449900,
             "quantity": 1,
             "currency": "INR",
         }],
-        "total_price_paise": 460800,
+        "total_price_paise": 449900,
     }
 
     compile_req = CompileRequest(
@@ -1248,11 +1248,11 @@ def run_guardrail_benchmark(iterations: int = 2000):
             "product_id": "PROD-WH-CH520",
             "product_name": "Sony WH-CH520 Wireless Headphones",
             "merchant_id": "demo-merchant.myshopify.com",
-            "offer_price_paise": 460800,
+            "offer_price_paise": 449900,
             "quantity": 1,
             "currency": "INR",
         }],
-        "total_price_paise": 460800,
+        "total_price_paise": 449900,
     }
 
     # Warmup
