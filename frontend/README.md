@@ -29,10 +29,10 @@ The frontend is a production-grade, highly responsive dashboard designed for mer
 | **🏬 Seller Co-Pilot** | `SellerOrdersLogisticsView.tsx` | AI-assisted store intelligence: real-time competitor scans (Amazon/ONDC), automated dynamic markdown rules for dead-stock liquidation, SKU inventory provisioning, and 1-click Delhivery/Bluedart logistics AWB dispatch. |
 | **🛒 Buyer Co-Pilot** | `BuyerChatView.tsx` | Natural language purchasing assistant: parses informal queries, displays multi-step reasoning steps in real-time, and renders cryptographic audit badges upon settlement. |
 | **📦 Universal Catalog** | `CatalogBrowserView.tsx` | Machine-readable multi-channel catalog (Groceries, Electronics, Audio, Fashion): live stock counters, supplier cost bindings, and 1-click "Buy with AI" intent pre-fills. |
-| **📜 Mandates Manager** | `MandatesManagerView.tsx` | UPI Autopay lifecycle hub: displays active mandates, Unique Mandate Numbers (UMN), "Tokenize via UPI Autopay" registration modal, and atomic 1-click mandate revocation (`INV-004`). |
+| **📜 Mandates Manager** | `MandatesManagerView.tsx` | UPI Autopay lifecycle hub: displays active mandates, Unique Mandate Numbers (UMN), "Tokenize via UPI Autopay" registration modal, per-ID isolated atomic revocation (`INV-004`), multi-state badges (`Active Autopay`, `Revoked`, `Pending Auth`), live tab count indicators (`All`, `Active`, `Revoked`), and instant NPCI webhook callback simulation. |
 | **🛡️ Invariants & Security** | `InvariantsView.tsx` | Real-time security matrix verifying all 10 security invariants (INV-001 through INV-010) with interactive audit proofs. |
 | **👤 Profile & Security** | `ProfileSecurityView.tsx` | User governance center: pre-approved spending ceilings (INR), linked UPI VPAs, auto-pay threshold sliders, and passkey/PIN gate configuration. |
-| **⚙️ Advanced Tools** | `AdvancedToolsView.tsx` | Developer & forensic toolbelt: Live Webhook Simulator (Razorpay capture, failure, and NPCI `mandate.authenticated` callbacks), 1-Click 2,000 Decisions Stress Benchmark, raw JSONL audit explorer, and RFC 7517 JWKS cryptographic inspector. |
+| **⚙️ Advanced Tools** | `AdvancedToolsView.tsx` | Developer & forensic toolbelt: Turbopack-resilient API inspector (`String(BACKEND_URL)` proxy safe), Live Webhook Simulator (Razorpay capture, failure, and NPCI `mandate.authenticated` callbacks), 1-Click 2,000 Decisions Stress Benchmark, raw JSONL audit explorer, and RFC 7517 JWKS cryptographic inspector. |
 
 ---
 

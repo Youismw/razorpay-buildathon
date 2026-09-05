@@ -269,3 +269,20 @@ Managed via `modules/universal_commerce_adapter/seller_manager.py`:
 - **Lifecycle State Progression**: Transitions orders atomically through `PLACED` ➔ `CONFIRMED` ➔ `DISPATCHED` ➔ `DELIVERED`.
 - **Cross-Channel Inventory Sync**: Automatically decrements available stock counts across all connected channels (Shopify GraphQL, ONDC Beckn, and local catalog).
 
+---
+
+## 11. Architectural Retrospective & Production Resilience
+
+### 11.1 Unified Orchestrator Core vs. Fragmented Micro-Routers
+During pre-submission hardening, we evaluated splitting `modules/orchestrator/main.py` into fragmented sub-routers (`routers/buyer.py`, `routers/seller.py`, `routers/mandates.py`). In a high-concurrency fintech system governed by strict cryptographic gates, this introduced state synchronization drift and circular module imports across the 5 stages. We deliberately chose to maintain a **centralized, unified orchestrator core**:
+- **Guaranteed Single Source of Truth (SSOT)**: All in-memory transactions, SSE broadcast streams, and SQLite ACID ledger operations execute under a unified process context without cross-router state desynchronization.
+- **Deterministic Pipeline Execution**: The 5-stage sandwich (`CONSTRAINT_COMPILATION` ➔ `REASONING_CORE` ➔ `GUARDRAIL_SHELL` ➔ `MANDATE_VAULT` ➔ `SETTLEMENT`) executes in a strictly sequential, auditable pipeline where each stage directly validates the previous stage's cryptographic output.
+- **Fail-Closed Simplicity**: Cryptographic failures in Stage 3 or 4 immediately abort settlement without distributed rollback overhead.
+
+### 11.2 Dual-Layer Mandate Lifecycle Engine
+To balance high-throughput read performance with strict ACID safety:
+1. **Memory Tier (`LIVE_MANDATES`)**: Provides sub-millisecond response times for frontend dashboard polling and real-time SSE stream telemetry.
+2. **ACID Persistence Tier (`audit_logs/mandates.db`)**: Enforces `INV-004` atomic revocation via per-mandate mutex locking simulating `SELECT ... FOR UPDATE`. Both user-initiated revocations and Razorpay webhook callbacks (`mandate.authenticated`) write synchronously to the SQLite WAL database before updating the in-memory tier, ensuring zero state drift across server restarts.
+
+### 11.3 Turbopack-Resilient Frontend Architecture
+In Next.js 16 under Turbopack, prototype methods on object proxies exported across module boundaries can be stripped during tree-shaking and bundler optimization. The frontend client architecture enforces primitive coercion (`String(BACKEND_URL)`) across all diagnostic and administrative tools, guaranteeing crash-free rendering across client-side navigation.

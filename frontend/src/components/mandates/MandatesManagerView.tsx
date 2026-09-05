@@ -39,6 +39,16 @@ const INITIAL_MANDATES: MandateItem[] = [
     created_at: "2026-09-01T12:30:11Z",
   },
   {
+    id: "mnd_2026_08_d198",
+    merchant_id: "demo-merchant.myshopify.com",
+    max_amount_inr: 15000,
+    state: "PAYMENT_ACTIVE",
+    token_id: "token_88291BA76C",
+    umn: "UMN-NPCI-2026-55192-AP2",
+    vpa: "rohit@oksbi",
+    created_at: "2026-09-02T14:10:00Z",
+  },
+  {
     id: "mnd_2026_08_c441",
     merchant_id: "demo-merchant.myshopify.com",
     max_amount_inr: 10000,
@@ -76,17 +86,27 @@ export const MandatesView: React.FC = () => {
 
   const handleRevoke = async (id: string) => {
     try {
+      // Optimistic isolated update targeted strictly to this specific mandate ID
+      setMandates((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, state: "REVOKED" as const } : m))
+      );
+
       const res = await fetch(`${BACKEND_URL}/api/mandates/revoke`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mandate_id: id }),
       });
       const data = await res.json();
-      setMandates((prev) => prev.map((m) => (m.id === id ? { ...m, state: "REVOKED" } : m)));
-      showToast("Mandate Revoked (INV-004)", data.proof || `${id} revoked atomically with mutex lock.`, "warning");
+      showToast(
+        "Mandate Revoked (INV-004)",
+        data.proof || `${id} revoked atomically with mutex lock.`,
+        "warning"
+      );
+      // Sync strictly with backend Single Source of Truth
+      fetchMandates();
     } catch {
-      setMandates((prev) => prev.map((m) => (m.id === id ? { ...m, state: "REVOKED" } : m)));
       showToast("Mandate Revoked", `${id} revoked immediately via INV-004.`, "warning");
+      fetchMandates();
     }
   };
 
@@ -124,6 +144,22 @@ export const MandatesView: React.FC = () => {
 
   const handleSimulateWebhook = async (mandateId: string) => {
     try {
+      const newUmn = `UMN-NPCI-2026-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+      // Instant optimistic UI update: immediately turn this specific mandate back to active
+      setMandates((prev) =>
+        prev.map((m) =>
+          m.id === mandateId
+            ? {
+                ...m,
+                state: "PAYMENT_ACTIVE" as const,
+                umn: m.umn || newUmn,
+                authenticated_at: new Date().toISOString(),
+              }
+            : m
+        )
+      );
+
       const simulatedPayload = {
         event: "mandate.authenticated",
         account_id: "acc_demo_razorpay",
@@ -132,7 +168,7 @@ export const MandatesView: React.FC = () => {
             entity: {
               id: mandateId,
               status: "active",
-              umn: `UMN-NPCI-2026-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+              umn: newUmn,
             },
           },
         },
@@ -146,12 +182,13 @@ export const MandatesView: React.FC = () => {
       if (!res.ok) throw new Error("Webhook rejected");
       showToast(
         "NPCI Webhook Processed",
-        `Webhook callback for ${mandateId} verified with HMAC-SHA256 signature.`,
+        `Mandate ${mandateId} reactivated via NPCI callback (UMN: ${newUmn})`,
         "success"
       );
       fetchMandates();
     } catch (err: any) {
       showToast("Webhook Error", err?.message || "Failed to trigger webhook", "error");
+      fetchMandates();
     }
   };
 
@@ -185,15 +222,24 @@ export const MandatesView: React.FC = () => {
             </button>
 
             <div className="flex items-center gap-1 bg-[var(--white-warm)] p-1 rounded-xl border border-[rgba(92,61,46,0.1)]">
-              {["ALL", "PAYMENT_ACTIVE", "REVOKED"].map((f) => (
+              {[
+                { key: "ALL", label: "All", count: mandates.length },
+                { key: "PAYMENT_ACTIVE", label: "Active", count: mandates.filter((m) => m.state === "PAYMENT_ACTIVE").length },
+                { key: "REVOKED", label: "Revoked", count: mandates.filter((m) => m.state === "REVOKED").length },
+              ].map(({ key, label, count }) => (
                 <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                    filter === f ? "bg-[var(--brown)] text-white" : "text-[var(--text-muted)] hover:bg-[var(--brown-faint)]"
+                  key={key}
+                  onClick={() => setFilter(key)}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                    filter === key ? "bg-[var(--brown)] text-white shadow-xs" : "text-[var(--text-muted)] hover:bg-[var(--brown-faint)]"
                   }`}
                 >
-                  {f === "ALL" ? "All" : f === "PAYMENT_ACTIVE" ? "Active" : "Revoked"}
+                  <span>{label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    filter === key ? "bg-white/20 text-white" : "bg-[rgba(92,61,46,0.08)] text-[var(--text-secondary)]"
+                  }`}>
+                    {count}
+                  </span>
                 </button>
               ))}
             </div>
@@ -204,6 +250,9 @@ export const MandatesView: React.FC = () => {
         <div className="space-y-3">
           {filtered.map((mandate) => {
             const isActive = mandate.state === "PAYMENT_ACTIVE";
+            const isRevoked = mandate.state === "REVOKED";
+            const isPending = mandate.state === "PENDING_AUTH";
+
             return (
               <div
                 key={mandate.id}
@@ -212,7 +261,11 @@ export const MandatesView: React.FC = () => {
                 <div className="flex items-start sm:items-center gap-3.5">
                   <div
                     className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                      isActive ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-600 border border-red-200"
+                      isActive
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : isRevoked
+                        ? "bg-red-50 text-red-600 border border-red-200"
+                        : "bg-amber-50 text-amber-700 border border-amber-200"
                     }`}
                   >
                     <CreditCard className="w-5 h-5" />
@@ -221,9 +274,22 @@ export const MandatesView: React.FC = () => {
                   <div>
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <span className="text-sm font-bold text-[var(--text-primary)] font-mono">{mandate.id}</span>
-                      <span className={`badge text-[10px] ${isActive ? "badge-success" : "badge-error"}`}>
-                        {isActive ? "Active Autopay" : "Revoked"}
-                      </span>
+                      {isActive && (
+                        <span className="badge badge-success text-[10px] flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Active Autopay
+                        </span>
+                      )}
+                      {isRevoked && (
+                        <span className="badge badge-error text-[10px]">
+                          Revoked (INV-004)
+                        </span>
+                      )}
+                      {isPending && (
+                        <span className="badge badge-warning text-[10px]">
+                          Pending Auth
+                        </span>
+                      )}
                       {mandate.umn && (
                         <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-mono border border-blue-200">
                           {mandate.umn}

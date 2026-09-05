@@ -78,6 +78,9 @@ LIVE_MANDATES: List[Dict[str, Any]] = [
         "merchant_id": "demo-merchant.myshopify.com",
         "max_amount_inr": 5000.0,
         "state": "PAYMENT_ACTIVE",
+        "token_id": "token_HcsU45R9c3D",
+        "umn": "UMN-NPCI-2026-99281-AP2",
+        "vpa": "buyer@okhdfcbank",
         "created_at": "2026-09-01T10:14:22Z",
     },
     {
@@ -85,21 +88,39 @@ LIVE_MANDATES: List[Dict[str, Any]] = [
         "merchant_id": "demo-merchant.myshopify.com",
         "max_amount_inr": 25000.0,
         "state": "PAYMENT_ACTIVE",
+        "token_id": "token_99182A8C44",
+        "umn": "UMN-NPCI-2026-11204-AP2",
+        "vpa": "rohit@okaxis",
         "created_at": "2026-09-01T12:30:11Z",
+    },
+    {
+        "id": "mnd_2026_08_d198",
+        "merchant_id": "demo-merchant.myshopify.com",
+        "max_amount_inr": 15000.0,
+        "state": "PAYMENT_ACTIVE",
+        "token_id": "token_88291BA76C",
+        "umn": "UMN-NPCI-2026-55192-AP2",
+        "vpa": "rohit@oksbi",
+        "created_at": "2026-09-02T14:10:00Z",
     },
     {
         "id": "mnd_2026_08_c441",
         "merchant_id": "demo-merchant.myshopify.com",
         "max_amount_inr": 10000.0,
         "state": "REVOKED",
+        "token_id": "token_71268AEF41",
+        "umn": "UMN-NPCI-2026-44391-REV",
+        "vpa": "buyer@okhdfcbank",
         "created_at": "2026-08-30T16:20:00Z",
+        "revoked_at": "2026-09-05T05:41:41.284675+00:00",
     },
 ]
 
-# Pre-register default active mandates in engine
-revocation_engine.register_mandate("mnd_2026_08_a7f3", 500000)
-revocation_engine.register_mandate("mnd_2026_08_b912", 2500000)
-revocation_engine.register_mandate("mnd_2026_08_c441", 1000000)
+# Pre-register default mandates in engine
+revocation_engine.register_mandate("mnd_2026_08_a7f3", 500000, "token_HcsU45R9c3D")
+revocation_engine.register_mandate("mnd_2026_08_b912", 2500000, "token_99182A8C44")
+revocation_engine.register_mandate("mnd_2026_08_d198", 1500000, "token_88291BA76C")
+revocation_engine.register_mandate("mnd_2026_08_c441", 1000000, "token_71268AEF41")
 try:
     revocation_engine.revoke("mnd_2026_08_c441", reason="Initial test revocation")
 except Exception:
@@ -891,7 +912,21 @@ class MandateRevokeRequest(BaseModel):
 
 @app.get("/api/mandates")
 def get_all_mandates():
-    """Return all active and revoked UPI Autopay mandates (INV-004)."""
+    """Return all active and revoked UPI Autopay mandates with SSOT sync (INV-004)."""
+    try:
+        conn = revocation_engine._get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT mandate_id, state, max_amount_paise, token_id, revoked_at FROM mandates")
+        db_states = {row[0]: (row[1], row[4]) for row in cur.fetchall()}
+        for m in LIVE_MANDATES:
+            if m["id"] in db_states:
+                m["state"] = db_states[m["id"]][0]
+                if m["state"] == "PAYMENT_ACTIVE":
+                    m.pop("revoked_at", None)
+                elif db_states[m["id"]][1]:
+                    m["revoked_at"] = db_states[m["id"]][1]
+    except Exception as e:
+        print(f"[Orchestrator] Notice: SSOT sync from DB: {e}")
     return {"mandates": LIVE_MANDATES}
 
 
@@ -1046,6 +1081,7 @@ def handle_razorpay_webhook_api(req: WebhookSimulateRequest, request: Request):
         for m in LIVE_MANDATES:
             if m.get("id") == parsed.mandate_id or (parsed.token_id and m.get("token_id") == parsed.token_id):
                 m["state"] = "PAYMENT_ACTIVE"
+                m.pop("revoked_at", None)
                 if parsed.token_id:
                     m["token_id"] = parsed.token_id
                 if parsed.umn:
@@ -1053,6 +1089,19 @@ def handle_razorpay_webhook_api(req: WebhookSimulateRequest, request: Request):
                 m["authenticated_at"] = now_iso
                 matched = True
                 break
+
+        # Also update SQLite DB so SSOT reflects reactivated state
+        target_mid = parsed.mandate_id or (parsed.token_id and next((m.get("id") for m in LIVE_MANDATES if m.get("token_id") == parsed.token_id), None))
+        if target_mid:
+            try:
+                conn = revocation_engine._get_connection()
+                with conn:
+                    conn.execute(
+                        "UPDATE mandates SET state = 'PAYMENT_ACTIVE', revoked_at = NULL, updated_at = ? WHERE mandate_id = ?",
+                        (now_iso, target_mid),
+                    )
+            except Exception as e:
+                print(f"[Webhook] DB update exception: {e}")
 
         if not matched and parsed.mandate_id:
             amt_inr = (parsed.max_amount_paise or 1000000) / 100.0
