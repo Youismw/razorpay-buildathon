@@ -1563,11 +1563,13 @@ def buy(req: BuyRequest):
                 or "unintelligible" in ai_summary.lower()
                 or "gibberish" in ai_summary.lower()
             )
-            err_msg = f"Ambiguous Request: {ai_summary}" if is_ambiguous else f"Product Not Found: {ai_summary}"
+            decision = "CLARIFICATION_NEEDED" if is_ambiguous else "REASONING_ERROR"
+            status = "ESCALATED" if is_ambiguous else "FAILED"
+            err_msg = f"Please clarify not enough context: {ai_summary}" if is_ambiguous else f"Product Not Found: {ai_summary}"
             paths = write_transaction_audit_files(
                 trace_id=trace_id,
-                status="FAILED",
-                decision="REASONING_ERROR",
+                status=status,
+                decision=decision,
                 raw_intent=req.raw_intent,
                 constraint_hash=constraint_hash,
                 total_price_paise=None,
@@ -1581,8 +1583,8 @@ def buy(req: BuyRequest):
             )
             return BuyResponse(
                 trace_id=trace_id,
-                status="FAILED",
-                decision="REASONING_ERROR",
+                status=status,
+                decision=decision,
                 constraint_hash=constraint_hash,
                 error=err_msg,
                 ai_thought_steps=ai_thought_steps,
@@ -2160,9 +2162,11 @@ async def buy_stream(req: BuyRequest):
                     or "unintelligible" in ai_summary.lower()
                     or "gibberish" in ai_summary.lower()
                 )
-                err_msg = f"Ambiguous Request: {ai_summary}" if is_ambiguous else f"Product Not Found: {ai_summary}"
-                yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'LLM_REASONING', 'error': err_msg, 'timestamp': ts()})}\n\n"
-                yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'REASONING_ERROR', 'error': err_msg, 'timestamp': ts()})}\n\n"
+                decision = "CLARIFICATION_NEEDED" if is_ambiguous else "REASONING_ERROR"
+                status = "ESCALATED" if is_ambiguous else "FAILED"
+                err_msg = f"Please clarify not enough context: {ai_summary}" if is_ambiguous else f"Product Not Found: {ai_summary}"
+                yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'LLM_REASONING', 'decision': decision, 'error': err_msg, 'timestamp': ts()})}\n\n"
+                yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': status, 'decision': decision, 'error': err_msg, 'timestamp': ts()})}\n\n"
                 return
 
             audit_trail.append({

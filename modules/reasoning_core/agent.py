@@ -69,8 +69,9 @@ def _build_system_prompt() -> str:
         "5. Do NOT include any markdown code fences, backticks, or text outside the raw JSON object.\n"
         "6. If NO product in the catalog matches what the buyer wants (e.g. the requested item is not sold in the catalog), set items to [] and total_price_paise to 0, and state clearly in reasoning_summary and thought_steps that no matching product exists in the catalog.\n"
         "7. If a requested product or brand is out of stock, you have autonomous authority to select a verified in-stock alternative brand from the same category within budget, explicitly detailing the substitution rationale in thought_steps and reasoning_summary.\n"
-        "8. If the buyer's request is gibberish, nonsensical, ambiguous, or lacks a coherent shopping entity (e.g. 'yaya ka pika bu j'), set items to [], total_price_paise to 0, set is_ambiguous to true, and in reasoning_summary politely ask: 'Please elaborate on what you mean. Your request does not match any recognizable product or shopping category.'\n"
-        "9. QUANTITY RULE: The 'quantity' field MUST represent the number of orderable package units requested by the buyer (defaults to 1). NEVER set 'quantity' to internal pack-size numbers mentioned in a product title or packaging description (e.g., for 'Farm Fresh White Eggs (Pack of 6)', 'Maggi 2-Minute Noodles (Pack of 4)', or 'Amul Butter 500g', purchasing 1 pack must have quantity: 1, NOT 6 or 4). Only set quantity > 1 if the buyer explicitly requested multiple units or packs (e.g. 'buy 2 packs of eggs' -> quantity: 2).\n"
+        "8. Generic single-word or broad category requests (such as 'headphone', 'headphones', 'milk', 'coffee', 'shoes', 'tea', 'bread', 'phone') are FULLY VALID shopping requests! You MUST autonomously find and select the best matching in-stock product in that category from the catalog. NEVER reject broad category queries as ambiguous or lacking description if a matching item exists in the catalog.\n"
+        "9. Only if the buyer's request is genuine gibberish, nonsensical, or completely devoid of any recognizable product (e.g. 'yaya ka pika bu j'), set items to [], total_price_paise to 0, set is_ambiguous to true, and in reasoning_summary politely ask: 'Please clarify not enough context: Could you please specify what product or category you are looking for?'\n"
+        "10. QUANTITY RULE: The 'quantity' field MUST represent the number of orderable package units requested by the buyer (defaults to 1). NEVER set 'quantity' to internal pack-size numbers mentioned in a product title or packaging description (e.g., for 'Farm Fresh White Eggs (Pack of 6)', 'Maggi 2-Minute Noodles (Pack of 4)', or 'Amul Butter 500g', purchasing 1 pack must have quantity: 1, NOT 6 or 4). Only set quantity > 1 if the buyer explicitly requested multiple units or packs (e.g. 'buy 2 packs of eggs' -> quantity: 2).\n"
     )
 
 
@@ -239,7 +240,9 @@ def _generate_mock_proposal(constraints: CompiledConstraints, catalog: Dict[str,
         "dairy": ["milk", "cheese", "butter", "paneer", "curd", "yogurt", "cream", "ghee"],
         "beverage": ["coffee", "tea", "juice", "drink"],
         "coffee": ["nescafe", "espresso", "latte", "roast", "blue tokai"],
-        "audio": ["headphones", "earbuds", "earphones", "soundcore", "xm5", "speaker"],
+        "audio": ["headphones", "headphone", "earbuds", "earphones", "soundcore", "xm5", "speaker"],
+        "headphone": ["headphones", "earbuds", "earphones", "audio", "sony", "boat"],
+        "headphones": ["headphone", "earbuds", "earphones", "audio", "sony", "boat"],
         "footwear": ["shoes", "sneakers", "boots", "sandals"],
         "clothing": ["shirt", "t-shirt", "jeans", "jacket", "hoodie", "pants"],
     }
@@ -408,11 +411,11 @@ def _generate_mock_proposal(constraints: CompiledConstraints, catalog: Dict[str,
 
     if best_item is None:
         KNOWN_COMMERCE_TERMS = {
-            "buy", "order", "purchase", "headphones", "earbuds", "speaker", "phone", "watch", "mouse", "keyboard",
-            "coffee", "milk", "tea", "bread", "butter", "eggs", "atta", "flour", "sneakers", "shoes", "bag",
-            "potash", "alum", "sugar", "salt", "oil", "rice", "dal", "soap", "shampoo", "cream", "sunglasses",
-            "laptop", "screen", "cable", "charger", "monitor", "socks", "shirt", "pants", "groceries", "food",
-            "groceries", "electronics", "audio", "fashion", "wireless", "bluetooth"
+            "buy", "order", "purchase", "headphone", "headphones", "earphone", "earphones", "earbud", "earbuds",
+            "speaker", "phone", "watch", "mouse", "keyboard", "coffee", "milk", "tea", "bread", "butter", "egg",
+            "eggs", "atta", "flour", "sneakers", "shoes", "shoe", "bag", "potash", "alum", "sugar", "salt", "oil",
+            "rice", "dal", "soap", "shampoo", "cream", "sunglasses", "laptop", "screen", "cable", "charger",
+            "monitor", "socks", "shirt", "pants", "groceries", "food", "electronics", "audio", "fashion", "wireless", "bluetooth"
         }
         has_known_term = any(w in KNOWN_COMMERCE_TERMS for w in query_words)
         is_ambiguous = not has_known_term and len(query_words) > 0
@@ -616,7 +619,7 @@ def _generate_gemini_proposal(
     system_prompt = _build_system_prompt()
     user_prompt = _build_user_prompt(constraints, catalog)
 
-    candidates = [model, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+    candidates = [model, "gemini-3.6-flash"]
     response = None
     used_model = model
     last_err = None
@@ -660,12 +663,12 @@ def _generate_groq_proposal(
     system_prompt = _build_system_prompt()
     user_prompt = _build_user_prompt(constraints, catalog)
 
-    candidates = [model, "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
+    candidates = [model, "llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
     data = None
     used_model = model
     last_err = None
 
-    with httpx.Client(timeout=15.0) as client:
+    with httpx.Client(timeout=3.0) as client:
         for candidate in dict.fromkeys(candidates):
             try:
                 resp = client.post(
@@ -807,11 +810,11 @@ def generate_proposal_sync(
     else:
         # Predefined hierarchy based on task complexity
         if mode == "basic":
-            # For basic tasks: use ultra-fast, high token limit Groq first to save Gemini quota
-            if has_groq:
-                chain.append(("groq", "openai/gpt-oss-20b"))
+            # Primary: frontier Gemini 3.6 Flash for instant grounding & high accuracy
             if has_gemini:
                 chain.append(("gemini", "gemini-3.6-flash"))
+            if has_groq:
+                chain.append(("groq", "llama-3.3-70b-versatile"))
             if has_openrouter:
                 chain.append(("openrouter", "deepseek/deepseek-chat"))
         else:
