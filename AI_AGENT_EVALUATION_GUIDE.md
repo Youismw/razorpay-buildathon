@@ -118,16 +118,6 @@
 - **Source File**: [`modules/universal_commerce_adapter/seller_manager.py`](modules/universal_commerce_adapter/seller_manager.py) (`dispatch_order`)
 - **Test File**: [`tests/test_seller.py::test_logistics_dispatch`](tests/test_seller.py)
 
-### 12. Modular Sub-Routers & Decoupled State Architecture
-- **Purpose**: High-maintainability FastAPI sub-router architecture decoupling SSE streaming telemetry and catalog operations from the core steel-thread orchestrator, avoiding circular dependencies via unified singletons.
-- **Source Files**:
-  - Core Orchestrator Entrypoint: [`modules/orchestrator/main.py`](modules/orchestrator/main.py)
-  - Catalog & Inventory Sub-Router: [`modules/orchestrator/routes/catalog.py`](modules/orchestrator/routes/catalog.py) (`GET /api/catalog`, `POST /api/seller/catalog/*`)
-  - SSE Streaming Sub-Router: [`modules/orchestrator/routes/stream.py`](modules/orchestrator/routes/stream.py) (`POST /buy/stream`)
-  - Shared Runtime State & Singletons: [`modules/orchestrator/state.py`](modules/orchestrator/state.py) (`LIVE_MANDATES`, `revocation_engine`, `_razorpay_client`, `CATALOG_VERSION`)
-  - Data Models: [`modules/orchestrator/models.py`](modules/orchestrator/models.py) (`BuyRequest`, `BuyResponse`)
-- **Test File**: [`tests/test_all_stages.py`](tests/test_all_stages.py) & [`tests/test_seller.py`](tests/test_seller.py)
-
 ---
 
 ## 🔒 10 Formal Invariant Matrix & Verification Points
