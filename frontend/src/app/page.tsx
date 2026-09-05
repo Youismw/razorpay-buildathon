@@ -402,7 +402,8 @@ function AppContent() {
       <PinPromptModal
         isOpen={isPinModalOpen}
         expectedPin={profile.userPin || "1234"}
-        totalAmountInr={pendingReq?.max_spend_inr || 0}
+        totalAmountInr={pendingReq?.estimated_total_inr || pendingReq?.max_spend_inr || 0}
+        maxSpendInr={pendingReq?.max_spend_inr}
         rawIntent={pendingReq?.raw_intent || ""}
         onSuccess={handlePinSuccess}
         onCancel={() => {

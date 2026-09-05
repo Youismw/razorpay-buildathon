@@ -79,13 +79,31 @@ def _build_user_prompt(constraints: CompiledConstraints, merchant_catalog: Dict[
     sanitized_query = sanitize_for_llm(constraints.product_query)
     sanitized_intent = sanitize_for_llm(constraints.raw_intent)
 
-    catalog_summary = []
+    # Token-efficient catalog pruning: deduplicate by name and rank by relevance to prevent context blowup
+    query_words = set(re.findall(r"\w+", (sanitized_query or sanitized_intent).lower()))
+    all_products = []
+    seen_names = set()
+
     for merchant_id, merchant_data in merchant_catalog.items():
         for pid, product in merchant_data.get("products", {}).items():
-            catalog_summary.append(
-                f"- Product ID: {pid} | Name: {product['name']} | Price: {product['price_paise']} paise | Merchant ID: {merchant_id} "
-                f"(category: {product.get('category', 'unknown')}, in_stock: {product.get('in_stock', False)})"
-            )
+            name = product.get("name", "")
+            if name in seen_names:
+                continue
+            seen_names.add(name)
+            name_words = set(re.findall(r"\w+", name.lower()))
+            cat_words = set(re.findall(r"\w+", product.get("category", "").lower()))
+            relevance = len(query_words & name_words) * 3 + len(query_words & cat_words)
+            all_products.append((relevance, merchant_id, pid, product))
+
+    all_products.sort(key=lambda x: x[0], reverse=True)
+    top_products = all_products[:35]
+
+    catalog_summary = []
+    for _, merchant_id, pid, product in top_products:
+        catalog_summary.append(
+            f"- Product ID: {pid} | Name: {product['name']} | Price: {product['price_paise']} paise | Merchant ID: {merchant_id} "
+            f"(category: {product.get('category', 'unknown')}, in_stock: {product.get('in_stock', False)})"
+        )
 
     return (
         f"Buyer intent: {sanitized_intent}\n"
@@ -606,7 +624,7 @@ def _post_process_proposal(
 def _generate_gemini_proposal(
     constraints: CompiledConstraints,
     catalog: Dict[str, Any],
-    model: str = "gemini-2.0-flash",
+    model: str = "gemini-3.6-flash",
 ) -> Tuple[Dict[str, Any], List[str], str]:
     """Call Google Gemini API for structured proposal generation."""
     from google import genai
@@ -653,7 +671,7 @@ def _generate_gemini_proposal(
 def _generate_groq_proposal(
     constraints: CompiledConstraints,
     catalog: Dict[str, Any],
-    model: str = "llama-3.3-70b-versatile",
+    model: str = "openai/gpt-oss-120b",
 ) -> Tuple[Dict[str, Any], List[str], str]:
     """Call Groq API (ultra-fast, high token limit) for structured proposal generation."""
     groq_key = os.environ.get("GROQ_API_KEY", "")
@@ -663,7 +681,7 @@ def _generate_groq_proposal(
     system_prompt = _build_system_prompt()
     user_prompt = _build_user_prompt(constraints, catalog)
 
-    candidates = [model, "llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+    candidates = [model, "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b"]
     data = None
     used_model = model
     last_err = None
@@ -808,23 +826,13 @@ def generate_proposal_sync(
     elif provider == "gemini" and has_gemini:
         chain = [("gemini", "gemini-3.6-flash")]
     else:
-        # Predefined hierarchy based on task complexity
-        if mode == "basic":
-            # Primary: frontier Gemini 3.6 Flash for instant grounding & high accuracy
-            if has_gemini:
-                chain.append(("gemini", "gemini-3.6-flash"))
-            if has_groq:
-                chain.append(("groq", "llama-3.3-70b-versatile"))
-            if has_openrouter:
-                chain.append(("openrouter", "deepseek/deepseek-chat"))
-        else:
-            # For advanced tasks: use frontier Gemini reasoning first, backup with DeepSeek & Groq 120b
-            if has_gemini:
-                chain.append(("gemini", "gemini-3.6-flash"))
-            if has_openrouter:
-                chain.append(("openrouter", "deepseek/deepseek-chat"))
-            if has_groq:
-                chain.append(("groq", "openai/gpt-oss-120b"))
+        # Ultra-fast routing: Groq first (sub-second), backed by OpenRouter (DeepSeek) & Gemini
+        if has_groq:
+            chain.append(("groq", "openai/gpt-oss-20b" if mode == "basic" else "openai/gpt-oss-120b"))
+        if has_openrouter:
+            chain.append(("openrouter", "deepseek/deepseek-chat"))
+        if has_gemini:
+            chain.append(("gemini", "gemini-3.6-flash"))
 
     cascade_notes = []
     final_proposal = None

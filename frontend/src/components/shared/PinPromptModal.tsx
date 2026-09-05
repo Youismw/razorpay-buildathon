@@ -7,6 +7,7 @@ interface PinPromptModalProps {
   isOpen: boolean;
   expectedPin: string;
   totalAmountInr: number;
+  maxSpendInr?: number;
   rawIntent: string;
   onSuccess: (enteredPin: string) => void;
   onCancel: () => void;
@@ -16,6 +17,7 @@ export const PinPromptModal: React.FC<PinPromptModalProps> = ({
   isOpen,
   expectedPin,
   totalAmountInr,
+  maxSpendInr,
   rawIntent,
   onSuccess,
   onCancel,
@@ -77,6 +79,11 @@ export const PinPromptModal: React.FC<PinPromptModalProps> = ({
           <div className="text-2xl font-bold font-mono text-[var(--brown-dark)]">
             ₹{totalAmountInr.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
           </div>
+          {maxSpendInr && maxSpendInr > totalAmountInr && (
+            <span className="text-[10px] font-mono text-[var(--text-muted)] block">
+              Authorized Ceiling: ₹{maxSpendInr.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+            </span>
+          )}
           <p className="text-xs text-[var(--text-secondary)] truncate px-2">
             {rawIntent}
           </p>

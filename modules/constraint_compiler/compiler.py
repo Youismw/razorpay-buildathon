@@ -37,6 +37,9 @@ _INTENT_PREFIXES = [
 def extract_amount_from_intent(raw_intent: str) -> Optional[int]:
     """Extract max spend amount in paise from natural language intent."""
     text = raw_intent.lower().strip()
+    # Strip unit rate specifications e.g. (Rate: ₹72/L) or @ ₹50/unit so they are not mistaken for spend ceilings
+    text = re.sub(r'\(?\s*rate\s*:\s*(?:rs\.?|₹|inr)?\s*\d+(?:\.\d{1,2})?(?:\s*/\s*[a-zA-Z]+)?\s*\)?', '', text, flags=re.I)
+    text = re.sub(r'(?:rs\.?|₹|inr)?\s*\d+(?:\.\d{1,2})?\s*/\s*(?:l|liter|litres|kg|g|gm|unit|pc|piece|pack|box)\b', '', text, flags=re.I)
     for pattern in _AMOUNT_PATTERNS:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:

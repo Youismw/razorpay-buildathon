@@ -1709,7 +1709,16 @@ def buy(req: BuyRequest):
     })
 
     if req.simulate_failure_stage == 3 or confidence.decision != "APPROVED":
-        fail_msg = "Guardrail Policy Block: Policy limits exceeded (INV-010: Budget ceiling breached or confidence threshold not met)"
+        if req.simulate_failure_stage == 3:
+            fail_msg = "Guardrail Policy Block: Policy limits exceeded (INV-010: Budget ceiling breached or confidence threshold not met)"
+        elif not policy_result.passed:
+            violations_text = "; ".join([v.message for v in policy_result.violations])
+            fail_msg = f"Guardrail Policy Block: Policy limits exceeded ({violations_text})"
+        elif not grounding_result.verified:
+            unverified_text = "; ".join(grounding_result.unverified_items) if grounding_result.unverified_items else "Item unverified or insufficient stock"
+            fail_msg = f"Guardrail Grounding Block: Inventory stock unverified ({unverified_text})"
+        else:
+            fail_msg = f"Guardrail Confidence Block: Composite score {confidence.confidence_score} below threshold {confidence.threshold}"
         paths = write_transaction_audit_files(
             trace_id=trace_id,
             status="ESCALATED",
@@ -2087,7 +2096,7 @@ async def buy_stream(req: BuyRequest):
         
         # 0. Initializing
         yield f"data: {json.dumps({'event': 'INIT', 'trace_id': trace_id, 'raw_intent': req.raw_intent, 'timestamp': ts()})}\n\n"
-        await asyncio.sleep(0.35)
+        await asyncio.sleep(0.05)
 
         # 1. Constraint Compilation
         if req.simulate_failure_stage == 1 or len(req.raw_intent.strip()) < 3:
@@ -2119,22 +2128,24 @@ async def buy_stream(req: BuyRequest):
             yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'COMPILATION_ERROR', 'error': str(e), 'timestamp': ts()})}\n\n"
             return
 
-        await asyncio.sleep(0.4)
+        await asyncio.sleep(0.05)
 
         # 2. AI Reasoning
         if req.simulate_failure_stage == 2 or req.llm_provider == "fail-reasoning":
             err_msg = "Reasoning Failure: No matching product found in merchant catalog for ungrounded query schema."
             thought_text = f"Parsed buyer intent -> Query '{req.raw_intent}' not indexed in merchant UCP catalog."
             yield f"data: {json.dumps({'event': 'AI_THOUGHT', 'step_index': 1, 'text': thought_text, 'timestamp': ts()})}\n\n"
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.1)
             yield f"data: {json.dumps({'event': 'AI_THOUGHT', 'step_index': 2, 'text': 'Zero candidate SKUs satisfy grounding constraints.', 'timestamp': ts()})}\n\n"
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.1)
             yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'LLM_REASONING', 'error': err_msg, 'timestamp': ts()})}\n\n"
             yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'FAILED', 'decision': 'REASONING_ERROR', 'error': err_msg, 'timestamp': ts()})}\n\n"
             return
 
         try:
-            reasoning_result = generate_proposal_sync(
+            # Run non-blocking to prevent blocking event loop and SSE socket flushing
+            reasoning_result = await asyncio.to_thread(
+                generate_proposal_sync,
                 constraints=compiled,
                 provider=req.llm_provider,
                 mode=req.mode,
@@ -2218,8 +2229,16 @@ async def buy_stream(req: BuyRequest):
         }
 
         if req.simulate_failure_stage == 3 or confidence.decision != "APPROVED":
-            violations_text = "; ".join([v.message for v in policy_result.violations]) if policy_result.violations else "Budget ceiling breached (INV-010)"
-            fail_msg = f"Guardrail Policy Block: Policy limits exceeded ({violations_text})"
+            if req.simulate_failure_stage == 3:
+                fail_msg = "Guardrail Policy Block: Policy limits exceeded (INV-010: Budget ceiling breached or confidence threshold not met)"
+            elif not policy_result.passed:
+                violations_text = "; ".join([v.message for v in policy_result.violations])
+                fail_msg = f"Guardrail Policy Block: Policy limits exceeded ({violations_text})"
+            elif not grounding_result.verified:
+                unverified_text = "; ".join(grounding_result.unverified_items) if grounding_result.unverified_items else "Item unverified or insufficient stock"
+                fail_msg = f"Guardrail Grounding Block: Inventory stock unverified ({unverified_text})"
+            else:
+                fail_msg = f"Guardrail Confidence Block: Composite score {confidence.confidence_score} below threshold {confidence.threshold}"
             yield f"data: {json.dumps({'event': 'STAGE_FAILED', 'stage': 'GUARDRAIL_SHELL', 'decision': confidence.decision, 'error': fail_msg, 'data': guardrail_data, 'timestamp': ts()})}\n\n"
             yield f"data: {json.dumps({'event': 'FINAL_STATUS', 'status': 'ESCALATED', 'decision': confidence.decision, 'error': fail_msg, 'timestamp': ts()})}\n\n"
             return

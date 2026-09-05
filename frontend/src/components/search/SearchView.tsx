@@ -507,12 +507,15 @@ export const SearchView: React.FC<SearchViewProps> = ({
                           const intentWithQty = `Buy ${selectedQty}${detectedStaple.unitLabel} of ${detectedStaple.name}${
                             hideRateRequested ? " (don't show rate)" : ` (Rate: ₹${detectedStaple.unitRateInr}/${detectedStaple.unitLabel})`
                           }`;
+                          const estimatedCost = detectedStaple.unitRateInr * selectedQty;
+                          const budgetCeiling = Math.max(500, estimatedCost + 100);
                           setRawIntent(intentWithQty);
-                          setMaxSpendInr(Math.max(500, detectedStaple.unitRateInr * selectedQty + 100));
+                          setMaxSpendInr(budgetCeiling);
                           setShowPipeline(true);
                           onExecute({
                             raw_intent: intentWithQty,
-                            max_spend_inr: Math.max(500, detectedStaple.unitRateInr * selectedQty + 100),
+                            max_spend_inr: budgetCeiling,
+                            estimated_total_inr: estimatedCost,
                             allowed_merchants: [merchant],
                             validity_hours: 24,
                             mode: searchMode,

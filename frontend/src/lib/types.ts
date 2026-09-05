@@ -114,6 +114,7 @@ export interface BuyRequest {
   raw_intent: string;
   buyer_did?: string;
   max_spend_inr?: number;
+  estimated_total_inr?: number;
   allowed_merchants?: string[];
   validity_hours?: number;
   mode?: "basic" | "advanced";
