@@ -160,7 +160,7 @@
         "price_paise": 7200,
         "category": "groceries",
         "in_stock": true,
-        "stock": 45
+        "stock": 38
       },
       "PROD-MILK-CD": {
         "name": "Country Delight Pure Cow Milk (1L)",
